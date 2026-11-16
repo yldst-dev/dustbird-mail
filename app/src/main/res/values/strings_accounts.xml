@@ -113,7 +113,7 @@
     <string name="accounts_identity_address">메일 주소</string>
     <string name="accounts_identity_name">보내는 이름</string>
     <string name="accounts_identity_signature">서명</string>
-    <string name="accounts_identity_label">라벨</string>
+    <string name="accounts_identity_label">주소 라벨</string>
     <string name="accounts_identity_label_support">메일 목록에서 이 주소를 구분하는 이름입니다. 다른 주소와 겹치면 안 됩니다.</string>
     <string name="accounts_identity_address_changed">주소를 바꾸면 검증 상태가 \'미검증\'으로 돌아갑니다.</string>
     <string name="accounts_identity_delete_title">보내는 주소 삭제</string>
@@ -166,7 +166,7 @@
     <string name="accounts_role_missing">맞는 폴더를 찾지 못했습니다. 직접 골라 주세요.</string>
     <string name="accounts_role_pick">폴더 고르기</string>
     <string name="accounts_role_pick_desc">%1$s 폴더 고르기</string>
-    <string name="accounts_role_pick_title">‘%1$s’로 쓸 폴더</string>
+    <string name="accounts_role_pick_title">‘%1$s’으로 쓸 폴더</string>
     <string name="accounts_role_pick_candidate">%1$s (후보)</string>
 
     <string name="accounts_data_heading">데이터</string>
@@ -179,7 +179,7 @@
     <string name="accounts_delete">계정 삭제</string>
     <string name="accounts_delete_title">계정을 삭제할까요?</string>
     <string name="accounts_delete_text">‘%1$s’ 계정의 로그인 정보, 캐시, 보낼 편지함, 알림 기록을 이 기기에서 지웁니다. 서버의 편지는 지워지지 않습니다. 이 작업은 되돌릴 수 없습니다.</string>
-    <string name="accounts_delete_confirm">계정 삭제</string>
+    <string name="accounts_delete_confirm">이 계정 삭제</string>
     <string name="accounts_delete_blocked_title">아직 남은 편지가 있습니다</string>
     <string name="accounts_delete_blocked_text">아직 끝나지 않은 발송 %1$d건과 임시 저장 편지 %2$d개가 있습니다. 계정을 지우면 이 편지들도 함께 사라지고 되돌릴 수 없습니다. 그래도 삭제할까요?</string>
     <string name="accounts_delete_blocked_confirm">모두 지우고 삭제</string>

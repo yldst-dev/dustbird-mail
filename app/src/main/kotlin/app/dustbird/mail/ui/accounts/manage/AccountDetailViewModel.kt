@@ -114,20 +114,22 @@ class AccountDetailViewModel(private val container: AppContainer, private val ac
                 return@launch
             }
             val (imap, smtp) = runChecks(account, Credentials(account.username, secret))
-            _reauth.value = if (imap !is CheckResult.Ok) {
-                Reauth.Failed(imap, smtp)
-            } else {
-                try {
-                    container.accounts.reauthenticate(
-                        accountId,
-                        secret,
-                        ConnectionStages(imapAuth = StageState.OK, smtpAuth = AccountRepository.stageOk(smtp is CheckResult.Ok)),
-                    )
-                    Reauth.Done
-                } catch (_: Exception) {
-                    Reauth.StoreFailed
-                }
+            if (imap !is CheckResult.Ok) {
+                _reauth.value = Reauth.Failed(imap, smtp)
+                return@launch
             }
+            val stored = try {
+                container.accounts.reauthenticate(
+                    accountId,
+                    secret,
+                    ConnectionStages(imapAuth = StageState.OK, smtpAuth = AccountRepository.stageOk(smtp is CheckResult.Ok)),
+                )
+                true
+            } catch (_: Exception) {
+                false
+            }
+            _reauth.value = if (stored) Reauth.Done else Reauth.StoreFailed
+            if (stored) container.sync.syncAccount(accountId)
         }
     }
 
