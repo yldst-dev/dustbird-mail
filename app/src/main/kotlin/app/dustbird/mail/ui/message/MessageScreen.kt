@@ -12,3 +12,8 @@ import app.dustbird.mail.ui.nav.ComposeArgs
 fun MessageRoute(messageId: Long, onBack: () -> Unit, onCompose: (ComposeArgs) -> Unit) {
     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text("MessageRoute") }
 }
+
+@Composable
+fun MessagePane(messageId: Long, onCompose: (ComposeArgs) -> Unit, modifier: Modifier = Modifier) {
+    Box(modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text("MessagePane") }
+}

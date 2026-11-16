@@ -23,6 +23,7 @@ abstract class MailDatabase : RoomDatabase() {
     abstract fun pendingFlags(): PendingFlagDao
     abstract fun notified(): NotifiedDao
     abstract fun sync(): SyncDao
+    abstract fun maintenance(): MaintenanceDao
 
     companion object {
         fun create(context: Context): MailDatabase =

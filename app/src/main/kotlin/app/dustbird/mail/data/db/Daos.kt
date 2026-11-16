@@ -288,3 +288,18 @@ interface SyncDao {
     @Query("UPDATE outbox SET state = :state, attempts = :attempts, failure = :failure, updatedAt = :now WHERE id = :id")
     fun setOutboxState(id: Long, state: app.dustbird.mail.core.send.SendState, attempts: Int, failure: String?, now: Long)
 }
+
+@Dao
+interface MaintenanceDao {
+    @Query("DELETE FROM message WHERE accountId = :accountId")
+    suspend fun deleteMessages(accountId: Long)
+
+    @Query("UPDATE folder SET uidValidity = 0, highestUid = 0, baselineComplete = 0, syncedAt = 0 WHERE accountId = :accountId")
+    suspend fun resetFolders(accountId: Long)
+
+    @Query("DELETE FROM pending_flag WHERE accountId = :accountId")
+    suspend fun deletePending(accountId: Long)
+
+    @Query("DELETE FROM notified WHERE accountId = :accountId")
+    suspend fun deleteNotified(accountId: Long)
+}

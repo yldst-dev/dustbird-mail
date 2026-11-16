@@ -11,6 +11,7 @@ import app.dustbird.mail.data.db.MailDatabase
 import app.dustbird.mail.data.repo.AccountRepository
 import app.dustbird.mail.data.repo.DraftRepository
 import app.dustbird.mail.data.repo.MailRepository
+import app.dustbird.mail.data.repo.MaintenanceRepository
 import app.dustbird.mail.data.secure.CredentialStore
 import app.dustbird.mail.data.secure.KeystoreCredentialStore
 import app.dustbird.mail.sync.ImapAccess
@@ -39,6 +40,7 @@ class AppContainer(
     val sync: SyncService by lazy { SyncService(db, imapAccess, accounts, notifier) }
     val mail = MailRepository(db, accounts, imapAccess)
     val drafts = DraftRepository(db, imapAccess)
+    val maintenance: MaintenanceRepository by lazy { MaintenanceRepository(db, credentials, settings, notifier) }
     val send: SendService by lazy { SendService(db, accounts, drafts, credentials, smtpSender, connector) }
 
     fun start() {
