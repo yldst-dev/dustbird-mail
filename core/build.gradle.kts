@@ -30,10 +30,15 @@ dependencies {
     greenmail(libs.greenmail)
 }
 
+val fixturesDir = rootProject.layout.projectDirectory.dir("testfixtures").asFile
+
 tasks.test {
     useJUnit()
     systemProperty("greenmail.classpath", greenmail.asPath)
-    systemProperty("fixtures.dir", rootProject.layout.projectDirectory.dir("testfixtures").asFile.absolutePath)
+    systemProperty("fixtures.dir", fixturesDir.absolutePath)
+    systemProperty("javax.net.ssl.trustStore", File(fixturesDir, "test-truststore.p12").absolutePath)
+    systemProperty("javax.net.ssl.trustStoreType", "PKCS12")
+    systemProperty("javax.net.ssl.trustStorePassword", "changeit")
 }
 
 tasks.register<JavaExec>("runTestServer") {

@@ -1,0 +1,47 @@
+package app.dustbird.mail.core.model
+
+enum class TransportSecurity { TLS, STARTTLS }
+
+data class ServerEndpoint(val host: String, val port: Int, val security: TransportSecurity)
+
+enum class AuthMethod { APP_PASSWORD, OAUTH2 }
+
+enum class UsernameStyle { FULL_ADDRESS, LOCAL_PART }
+
+enum class FolderRole { INBOX, SENT, DRAFTS, SPAM, TRASH, ARCHIVE, ALL }
+
+enum class SendVerification { UNVERIFIED, VERIFIED, FAILED }
+
+enum class SyncMode { MANUAL, PERIODIC, IDLE }
+
+data class EmailAddress(val address: String, val name: String? = null)
+
+data class MailAccount(
+    val id: Long,
+    val providerId: String,
+    val displayName: String,
+    val label: String,
+    val username: String,
+    val imap: ServerEndpoint,
+    val smtp: ServerEndpoint,
+    val authMethod: AuthMethod,
+    val sortOrder: Int,
+    val syncMode: SyncMode,
+    val notificationsEnabled: Boolean,
+)
+
+data class MailIdentity(
+    val id: Long,
+    val accountId: Long,
+    val address: String,
+    val displayName: String,
+    val signature: String,
+    val label: String,
+    val sortOrder: Int,
+    val isAccountDefault: Boolean,
+    val verification: SendVerification,
+)
+
+data class Credentials(val username: String, val secret: String) {
+    override fun toString(): String = "Credentials(username=***, secret=***)"
+}
