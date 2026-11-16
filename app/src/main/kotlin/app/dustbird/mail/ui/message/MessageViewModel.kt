@@ -23,6 +23,7 @@ import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 sealed interface HeaderState {
     data object Loading : HeaderState
@@ -84,10 +85,7 @@ class MessageViewModel(private val container: AppContainer, private val id: Long
         viewModelScope.launch {
             val result = container.mail.body(id)
             loaded.value = result
-            if (result is BodyResult.Loaded) {
-                setSeen(true)
-                replyAllUseful.value = replyAllDiffersFromReply()
-            }
+            if (result is BodyResult.Loaded) replyAllUseful.value = withContext(Dispatchers.Default) { replyAllDiffersFromReply() }
         }
     }
 

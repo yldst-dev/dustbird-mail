@@ -19,10 +19,12 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -61,7 +63,16 @@ private fun MessageContent(messageId: Long, onCompose: (ComposeArgs) -> Unit, mo
         val body by viewModel.body.collectAsStateWithLifecycle()
         val replyAll by viewModel.replyAll.collectAsStateWithLifecycle()
         var pendingLink by remember { mutableStateOf<LinkTarget?>(null) }
+        var markedRead by rememberSaveable { mutableStateOf(false) }
         val context = LocalContext.current
+
+        val bodyReady = body is BodyState.Ready
+        LaunchedEffect(bodyReady) {
+            if (bodyReady && !markedRead) {
+                markedRead = true
+                viewModel.setSeen(true)
+            }
+        }
 
         when (val state = header) {
             HeaderState.Loading -> CenteredLoading(modifier)
