@@ -74,7 +74,7 @@ import kotlinx.coroutines.launch
 @Composable
 fun MailboxRoute(
     onOpenMessage: (Long) -> Unit,
-    onCompose: () -> Unit,
+    onCompose: (ComposeArgs) -> Unit,
     onOpenAccounts: () -> Unit,
     onOpenSettings: () -> Unit,
     onOpenOutbox: () -> Unit,
@@ -106,7 +106,7 @@ private fun MailboxScreen(
     online: Boolean,
     viewModel: MailboxViewModel,
     onOpenMessage: (Long) -> Unit,
-    onCompose: () -> Unit,
+    onCompose: (ComposeArgs) -> Unit,
     onOpenAccounts: () -> Unit,
     onOpenSettings: () -> Unit,
     onOpenOutbox: () -> Unit,
@@ -126,9 +126,6 @@ private fun MailboxScreen(
 
     LaunchedEffect(viewModel, resources) { viewModel.notices.collect { snackbar.showSnackbar(resources.getString(it)) } }
 
-    val composeFromPane: (ComposeArgs) -> Unit = { args ->
-        if (args == ComposeArgs()) onCompose() else state.selectedId?.let(onOpenMessage)
-    }
     val menu: @Composable () -> Unit = {
         MailboxMenu(
             state = state,
@@ -162,7 +159,7 @@ private fun MailboxScreen(
                 ExtendedFloatingActionButton(
                     text = { Text(label) },
                     icon = { Icon(Icons.Filled.Edit, contentDescription = null) },
-                    onClick = onCompose,
+                    onClick = { onCompose(ComposeArgs()) },
                     expanded = expanded,
                     modifier = if (expanded) Modifier else Modifier.semantics { contentDescription = label },
                 )
@@ -202,7 +199,7 @@ private fun MailboxScreen(
                                         )
                                     }
                                 } else {
-                                    key(selected) { MessagePane(selected, composeFromPane) }
+                                    key(selected) { MessagePane(selected, onCompose) }
                                 }
                             }
                         },

@@ -42,7 +42,7 @@ fun MailApp(openMessageId: Long?, openAccountId: Long?) {
         composable(Routes.MAILBOX) {
             MailboxRoute(
                 onOpenMessage = { navController.navigate(Routes.message(it)) },
-                onCompose = { navController.navigate(Routes.compose(ComposeArgs())) },
+                onCompose = { navController.navigate(Routes.compose(it)) },
                 onOpenAccounts = { navController.navigate(Routes.ACCOUNTS) },
                 onOpenSettings = { navController.navigate(Routes.SETTINGS) },
                 onOpenOutbox = { navController.navigate(Routes.OUTBOX) },
