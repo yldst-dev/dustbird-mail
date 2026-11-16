@@ -53,6 +53,7 @@ greenmail = { module = "com.icegreen:greenmail", version.ref = "greenmail" }
 junit = { module = "junit:junit", version.ref = "junit" }
 test-ext-junit = { module = "androidx.test.ext:junit", version.ref = "testExtJunit" }
 test-runner = { module = "androidx.test:runner", version.ref = "testRunner" }
+test-rules = { module = "androidx.test:rules", version.ref = "testRunner" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

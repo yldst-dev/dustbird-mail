@@ -90,6 +90,7 @@ dependencies {
     androidTestImplementation(libs.compose.ui.test.junit4)
     androidTestImplementation(libs.test.ext.junit)
     androidTestImplementation(libs.test.runner)
+    androidTestImplementation(libs.test.rules)
     androidTestImplementation(kotlin("test"))
     androidTestImplementation(libs.coroutines.core)
     androidTestImplementation(libs.android.mail)
