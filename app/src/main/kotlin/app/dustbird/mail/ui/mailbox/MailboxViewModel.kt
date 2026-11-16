@@ -134,6 +134,7 @@ class MailboxViewModel(private val container: AppContainer) : ViewModel() {
                 throw error
             } catch (_: Exception) {
             } finally {
+                exhausted.value = emptySet()
                 refreshing.value = false
             }
         }

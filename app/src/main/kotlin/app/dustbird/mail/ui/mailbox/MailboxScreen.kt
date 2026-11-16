@@ -68,7 +68,6 @@ import app.dustbird.mail.data.repo.MailboxScope
 import app.dustbird.mail.ui.appViewModel
 import app.dustbird.mail.ui.message.MessagePane
 import app.dustbird.mail.ui.nav.ComposeArgs
-import app.dustbird.mail.ui.nav.ComposeMode
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
@@ -79,7 +78,6 @@ fun MailboxRoute(
     onOpenAccounts: () -> Unit,
     onOpenSettings: () -> Unit,
     onOpenOutbox: () -> Unit,
-    onComposeWith: ((ComposeArgs) -> Unit)? = null,
 ) {
     val viewModel = appViewModel { MailboxViewModel(it) }
     val loaded by viewModel.state.collectAsStateWithLifecycle()
@@ -94,7 +92,6 @@ fun MailboxRoute(
             viewModel = viewModel,
             onOpenMessage = onOpenMessage,
             onCompose = onCompose,
-            onComposeWith = onComposeWith,
             onOpenAccounts = onOpenAccounts,
             onOpenSettings = onOpenSettings,
             onOpenOutbox = onOpenOutbox,
@@ -110,7 +107,6 @@ private fun MailboxScreen(
     viewModel: MailboxViewModel,
     onOpenMessage: (Long) -> Unit,
     onCompose: () -> Unit,
-    onComposeWith: ((ComposeArgs) -> Unit)?,
     onOpenAccounts: () -> Unit,
     onOpenSettings: () -> Unit,
     onOpenOutbox: () -> Unit,
@@ -129,21 +125,19 @@ private fun MailboxScreen(
     val fabExpanded by remember { derivedStateOf { listState.firstVisibleItemIndex == 0 } }
 
     LaunchedEffect(viewModel, resources) { viewModel.notices.collect { snackbar.showSnackbar(resources.getString(it)) } }
-    LaunchedEffect(state.scope) { listState.scrollToItem(0) }
 
     val composeFromPane: (ComposeArgs) -> Unit = { args ->
-        when {
-            onComposeWith != null -> onComposeWith(args)
-            args.mode == ComposeMode.NEW -> onCompose()
-            else -> args.sourceMessageId?.let(onOpenMessage)
-        }
+        if (args == ComposeArgs()) onCompose() else state.selectedId?.let(onOpenMessage)
     }
     val menu: @Composable () -> Unit = {
         MailboxMenu(
             state = state,
             onSelect = { target ->
                 viewModel.openScope(target)
-                coroutineScope.launch { drawerState.close() }
+                coroutineScope.launch {
+                    listState.scrollToItem(0)
+                    drawerState.close()
+                }
             },
         )
     }
