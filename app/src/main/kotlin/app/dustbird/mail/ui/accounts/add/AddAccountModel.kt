@@ -6,12 +6,16 @@ import androidx.compose.foundation.text.input.setTextAndPlaceCursorAtEnd
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import app.dustbird.mail.core.folder.FolderInfo
+import app.dustbird.mail.core.folder.FolderRoles
+import app.dustbird.mail.core.folder.RoleResolution
 import app.dustbird.mail.core.identity.Addresses
 import app.dustbird.mail.core.identity.Rejection
 import app.dustbird.mail.core.model.FolderRole
 import app.dustbird.mail.core.model.TransportSecurity
 import app.dustbird.mail.core.net.CheckResult
 import app.dustbird.mail.core.provider.ProviderProfile
+import app.dustbird.mail.data.db.FolderEntity
 import app.dustbird.mail.sync.SyncOutcome
 
 enum class AddStep { CHOOSE, PREPARE, FORM, VERIFY, SYNC, ROLES }
@@ -121,6 +125,29 @@ data class RolePrompt(
     val missing: Boolean,
     val selected: String? = null,
 )
+
+private val confirmableRoles = listOf(FolderRole.SENT, FolderRole.DRAFTS, FolderRole.SPAM)
+
+fun rolePrompts(folders: List<FolderEntity>): List<RolePrompt> {
+    val infos = folders.map { entity ->
+        FolderInfo(
+            path = entity.path,
+            delimiter = entity.delimiter?.firstOrNull(),
+            attributes = entity.attributes.split(' ').filter { it.isNotEmpty() }.toSet(),
+        )
+    }
+    val confirmed = folders.filter { it.roleConfirmed && it.role != null }.associate { it.role!! to it.path }
+    val resolved = FolderRoles.resolve(infos, confirmed)
+    val assigned = resolved.values.mapNotNull { (it as? RoleResolution.Assigned)?.path }.toSet()
+    val others = infos.filter { it.selectable && it.path !in assigned }.map { it.path }
+    return confirmableRoles.mapNotNull { role ->
+        when (val resolution = resolved.getValue(role)) {
+            is RoleResolution.Assigned -> null
+            is RoleResolution.NeedsConfirmation -> RolePrompt(role, resolution.candidates, missing = false)
+            RoleResolution.Missing -> others.takeIf { it.isNotEmpty() }?.let { RolePrompt(role, it, missing = true) }
+        }
+    }
+}
 
 data class AddAccountUiState(
     val step: AddStep = AddStep.CHOOSE,

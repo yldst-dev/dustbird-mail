@@ -365,13 +365,17 @@ fun FormStep(providerId: String, fields: AddAccountFields, showErrors: Boolean, 
 }
 
 @Composable
-private fun FailureText(failure: ConnectFailure, detail: String?, providerId: String?) {
+private fun FailureText(failure: ConnectFailure, detail: String?, providerId: String?, sameCause: Boolean = false) {
     Text(
         stringResource(failureTitle(failure)),
         style = MaterialTheme.typography.titleSmallEmphasized,
         color = MaterialTheme.colorScheme.error,
     )
-    failureBodies(failure, providerId).forEach { Text(stringResource(it), style = MaterialTheme.typography.bodyMedium) }
+    if (sameCause) {
+        Text(stringResource(R.string.add_account_fail_same_cause), style = MaterialTheme.typography.bodyMedium)
+    } else {
+        failureBodies(failure, providerId).forEach { Text(stringResource(it), style = MaterialTheme.typography.bodyMedium) }
+    }
     if (failure == ConnectFailure.OTHER && !detail.isNullOrBlank()) {
         Text(
             stringResource(R.string.add_account_fail_other_detail),
@@ -383,7 +387,7 @@ private fun FailureText(failure: ConnectFailure, detail: String?, providerId: St
 }
 
 @Composable
-private fun StageRow(@StringRes title: Int, stage: Stage, providerId: String?, skipped: Boolean) {
+private fun StageRow(@StringRes title: Int, stage: Stage, providerId: String?, sameCauseAs: ConnectFailure? = null) {
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
         Box(Modifier.size(40.dp), contentAlignment = Alignment.Center) {
             when {
@@ -399,15 +403,11 @@ private fun StageRow(@StringRes title: Int, stage: Stage, providerId: String?, s
             Text(stringResource(title), style = MaterialTheme.typography.titleMediumEmphasized)
             val statusColor = MaterialTheme.colorScheme.onSurfaceVariant
             when (stage) {
-                Stage.Pending -> Text(
-                    stringResource(if (skipped) R.string.add_account_verify_skipped else R.string.add_account_verify_waiting),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = statusColor,
-                )
+                Stage.Pending -> Text(stringResource(R.string.add_account_verify_waiting), style = MaterialTheme.typography.bodyMedium, color = statusColor)
                 Stage.Running -> Text(stringResource(R.string.add_account_verify_running), style = MaterialTheme.typography.bodyMedium, color = statusColor)
                 is Stage.Done -> when (val result = stage.result) {
                     CheckResult.Ok -> Text(stringResource(R.string.add_account_verify_ok), style = MaterialTheme.typography.bodyMedium)
-                    is CheckResult.Failed -> FailureText(result.failure, result.detail, providerId)
+                    is CheckResult.Failed -> FailureText(result.failure, result.detail, providerId, sameCause = result.failure == sameCauseAs)
                 }
             }
         }
@@ -419,11 +419,11 @@ fun VerifyStep(state: AddAccountUiState, onSave: () -> Unit, onEdit: () -> Unit,
     val allPassed = state.imap.passed && state.smtp.passed
     val running = state.imap is Stage.Running || state.smtp is Stage.Running
     StepColumn {
-        StageRow(R.string.add_account_section_imap, state.imap, state.providerId, skipped = false)
+        StageRow(R.string.add_account_section_imap, state.imap, state.providerId)
         HorizontalDivider()
         StageRow(
             R.string.add_account_section_smtp, state.smtp, state.providerId,
-            skipped = state.imap is Stage.Done && !state.imap.passed,
+            sameCauseAs = ((state.imap as? Stage.Done)?.result as? CheckResult.Failed)?.failure,
         )
         if (allPassed) {
             Column(Modifier.semantics { liveRegion = LiveRegionMode.Polite }, verticalArrangement = Arrangement.spacedBy(4.dp)) {

@@ -7,9 +7,6 @@ import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import app.dustbird.mail.AppContainer
-import app.dustbird.mail.core.folder.FolderInfo
-import app.dustbird.mail.core.folder.FolderRoles
-import app.dustbird.mail.core.folder.RoleResolution
 import app.dustbird.mail.core.model.ConnectionStages
 import app.dustbird.mail.core.model.Credentials
 import app.dustbird.mail.core.model.FolderRole
@@ -38,11 +35,10 @@ private const val KEY_PROVIDER = "add_account_provider"
 private const val KEY_NAME = "add_account_name"
 private const val KEY_ACCOUNT = "add_account_account"
 private const val DETAIL_LIMIT = 300
-private val syncedRoles = listOf(FolderRole.SENT, FolderRole.DRAFTS, FolderRole.SPAM)
 
 class AddAccountViewModel(
     private val container: AppContainer,
-    private val handle: SavedStateHandle = SavedStateHandle(),
+    private val handle: SavedStateHandle,
     private val imapCheck: (ServerEndpoint, Credentials) -> CheckResult = { endpoint, credentials ->
         ConnectionChecks.imap(container.connector, endpoint, credentials)
     },
@@ -93,7 +89,8 @@ class AddAccountViewModel(
             AddStep.PREPARE -> set { copy(step = AddStep.CHOOSE) }
             AddStep.FORM -> set { copy(step = AddStep.PREPARE) }
             AddStep.VERIFY -> backToForm()
-            AddStep.SYNC, AddStep.ROLES -> finish()
+            AddStep.SYNC -> finish()
+            AddStep.ROLES -> set { copy(step = AddStep.SYNC) }
         }
     }
 
@@ -123,16 +120,14 @@ class AddAccountViewModel(
         set { copy(step = AddStep.VERIFY, imap = Stage.Running, smtp = Stage.Pending, saveError = null) }
         verifyJob = viewModelScope.launch {
             val imap = withContext(Dispatchers.IO) { imapCheck(new.imap, credentials) }.scrubbed(secret)
-            set { copy(imap = Stage.Done(imap)) }
-            if (imap is CheckResult.Ok) {
-                set { copy(smtp = Stage.Running) }
-                val smtp = withContext(Dispatchers.IO) { smtpCheck(new.smtp, credentials) }.scrubbed(secret)
-                set { copy(smtp = Stage.Done(smtp)) }
-            }
+            set { copy(imap = Stage.Done(imap), smtp = Stage.Running) }
+            val smtp = withContext(Dispatchers.IO) { smtpCheck(new.smtp, credentials) }.scrubbed(secret)
+            set { copy(smtp = Stage.Done(smtp)) }
         }
     }
 
     fun backToForm() {
+        if (_state.value.busy) return
         verifyJob?.cancel()
         pending = null
         val failure = (_state.value.imap as? Stage.Done)?.result as? CheckResult.Failed
@@ -200,29 +195,8 @@ class AddAccountViewModel(
     private fun startSync(accountId: Long) {
         container.scope.launch {
             val outcome = container.sync.syncAccount(accountId)
-            val roles = if (outcome == SyncOutcome.Synced) rolePrompts(accountId) else emptyList()
+            val roles = if (outcome == SyncOutcome.Synced) rolePrompts(container.db.folders().observeForAccount(accountId).first()) else emptyList()
             withContext(Dispatchers.Main) { set { copy(sync = outcome, roles = roles) } }
-        }
-    }
-
-    private suspend fun rolePrompts(accountId: Long): List<RolePrompt> {
-        val folders = container.db.folders().observeForAccount(accountId).first()
-        val infos = folders.map { entity ->
-            FolderInfo(
-                path = entity.path,
-                delimiter = entity.delimiter?.firstOrNull(),
-                attributes = entity.attributes.split(' ').filter { it.isNotEmpty() }.toSet(),
-            )
-        }
-        val confirmed = folders.filter { it.roleConfirmed && it.role != null }.associate { it.role!! to it.path }
-        val resolved = FolderRoles.resolve(infos, confirmed)
-        val others = infos.filter { it.selectable && !FolderRoles.isInbox(it.path) }.map { it.path }
-        return syncedRoles.mapNotNull { role ->
-            when (val resolution = resolved.getValue(role)) {
-                is RoleResolution.Assigned -> null
-                is RoleResolution.NeedsConfirmation -> RolePrompt(role, resolution.candidates, missing = false)
-                RoleResolution.Missing -> others.takeIf { it.isNotEmpty() }?.let { RolePrompt(role, it, missing = true) }
-            }
         }
     }
 

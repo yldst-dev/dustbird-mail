@@ -84,7 +84,6 @@
     <string name="add_account_verify_waiting">앞 단계가 끝나길 기다리는 중입니다.</string>
     <string name="add_account_verify_running">로그인하는 중입니다.</string>
     <string name="add_account_verify_ok">로그인할 수 있습니다.</string>
-    <string name="add_account_verify_skipped">받는 서버 문제를 먼저 해결해 주세요.</string>
     <string name="add_account_verify_success_title">두 서버 모두 로그인할 수 있습니다</string>
     <string name="add_account_verify_success_body">받는 서버와 보내는 서버의 로그인이 확인되었습니다. 실제 발송, 실제 수신, 보낸 편지함에 사본이 남는지는 메일을 쓰면서 차례로 확인합니다. 확인용 메일은 보내지 않았습니다.</string>
     <string name="add_account_verify_save">계정 추가하기</string>
@@ -110,6 +109,8 @@
     <string name="add_account_fail_disabled_naver">네이버 메일 웹에서 환경설정 &gt; POP3/IMAP 설정 &gt; IMAP/SMTP 설정으로 가서 \'IMAP/SMTP 사용\'을 \'사용함\'으로 바꿔 주세요. 90일 동안 쓰지 않으면 네이버가 \'사용 안 함\'으로 되돌리므로, 오래 쓰지 않았다면 다시 확인해 보세요.</string>
     <string name="add_account_fail_disabled_gmail">개인 Google 계정은 IMAP이 항상 켜져 있습니다. Google Workspace 계정이라면 IMAP 사용 여부를 관리자가 정하므로 관리자에게 문의해 주세요.</string>
     <string name="add_account_fail_disabled_default">서비스의 메일 설정에서 IMAP과 SMTP 사용 여부를 확인해 주세요.</string>
+
+    <string name="add_account_fail_same_cause">받는 서버와 같은 원인입니다. 위의 안내를 따라 주세요.</string>
 
     <string name="add_account_fail_other_title">원인을 알 수 없는 오류입니다</string>
     <string name="add_account_fail_other_body">입력한 값을 다시 확인한 뒤 다시 시도해 주세요.</string>
