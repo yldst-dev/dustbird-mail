@@ -6,6 +6,38 @@
 
 중요: 이 앱의 실제 계정 검증(iCloud, Gmail, 네이버)은 개발 중에 수행하지 않았습니다. 개발 중에는 테스트 서버만 썼고 외부로 메일을 보내지 않았습니다. 검증 절차는 [docs/verification-checklist.md](docs/verification-checklist.md)에 있습니다.
 
+## 검증 현황
+
+2026년 11월 16일 기준, 실제로 실행한 결과입니다.
+
+| 항목 | 결과 |
+| --- | --- |
+| `./gradlew :app:assembleDebug` | 성공. 디버그 APK 약 45MB |
+| `./gradlew :core:test` | 131개 통과 |
+| `./gradlew :app:testDebugUnitTest` | 24개 통과 |
+| `./gradlew :app:lintDebug` | 오류 0건, 경고 1건(targetSdk 36을 의도적으로 유지) |
+| `./gradlew :app:connectedDebugAndroidTest` | 99개 실행, 실패 0건, 1건은 스크린샷용 시드 테스트라 건너뜀. 에뮬레이터(Android 36, arm64, 구글 API) |
+| 실제 서비스 검증(iCloud, Gmail, 네이버) | 수행하지 않음. 서비스별로 따로 적습니다: iCloud 미수행, Gmail 미수행, 네이버 미수행 |
+| 갤럭시 실기기, 폴더블 펼친 화면, 글자 크기 200%, TalkBack, 가로 회전, 입력기 동작 | 확인하지 못함 |
+
+기기 테스트에는 테스트 서버를 실제 IMAP과 SMTP 코드로 거쳐서 보내기, 받기, 답장 연결, 읽음 동기화, 한 계정 인증 실패 격리, 초안 이동, 실시간 수신(IDLE) 알림, 알림 내용과 잠금 화면 처리, 자격 증명 보관과 삭제가 들어 있습니다. 테스트 서버 결과는 실제 서비스 검증이 아닙니다.
+
+## 주요 화면
+
+모든 스크린샷은 테스트 서버의 예시 데이터이며 실제 주소나 메일이 아닙니다. 에뮬레이터 기본 동적 색상입니다.
+
+| 계정 추가 준비 | 통합 받은편지함 | HTML 메일 |
+| --- | --- | --- |
+| ![계정 추가 준비](docs/screenshots/add-account-prepare.png) | ![통합 받은편지함](docs/screenshots/mailbox.png) | ![HTML 메일](docs/screenshots/message-html.png) |
+
+| 답장 작성 | 보낼 편지함 | 계정 목록 |
+| --- | --- | --- |
+| ![답장 작성](docs/screenshots/compose-reply.png) | ![보낼 편지함](docs/screenshots/outbox.png) | ![계정 목록](docs/screenshots/accounts.png) |
+
+| 계정 상세 | 설정 |
+| --- | --- |
+| ![계정 상세](docs/screenshots/account-detail.png) | ![설정](docs/screenshots/settings.png) |
+
 ## 구성
 
 | 위치 | 내용 |
@@ -94,6 +126,11 @@ sdk.dir=/path/to/Android/sdk
 - 한 번에 가져오는 처음 페이지는 계정과 폴더마다 최신 50통이며 이전 메일은 "더 보기"로 불러옵니다.
 - 서비스별 보낸 편지함 자동 저장, 전달 헤더, 폴더 속성 같은 동작은 `docs/providers.md`의 미확인 항목을 실제 계정으로 확인한 뒤 프로필 값을 고쳐야 합니다.
 - 실시간 서비스는 앱이 화면에 있을 때만 시작할 수 있는 안드로이드 제약이 있습니다.
+- 계정 하나에 로그인 이름이 하나뿐이라 IMAP과 SMTP가 같은 이름을 씁니다. Apple 문서처럼 IMAP은 주소 앞부분, SMTP는 전체 주소가 필요한 경우는 지원하지 못합니다(이전 클라이언트에서는 전체 주소로 동작했습니다).
+- 메일 상세에서 화면을 회전하면 스크롤 위치가 처음으로 돌아가고 링크 확인 창이 닫힙니다. HTML 메일을 열 때마다 내장 서체 6.7MB를 읽습니다.
+- 계정 추가 첫 화면에서 시스템 뒤로 가기를 누르면 앱이 종료됩니다(돌아갈 곳이 없기 때문). 실기기에서의 동작은 확인하지 못했습니다.
+- 서버가 BODYSTRUCTURE를 라이브러리가 읽지 못하는 형태로 돌려주면 본문을 지연해서 읽을 수 없어서 메일 전체를 받아 해석합니다(테스트 서버에서 겪었고 대체 경로를 만들었습니다).
+- 시스템 언어가 한국어가 아니면 답장 인용문의 날짜가 시스템 언어 형식으로 나옵니다.
 
 ## 알파, 베타, 릴리스 후보 의존성
 

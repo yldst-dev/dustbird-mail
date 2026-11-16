@@ -1,6 +1,9 @@
 package app.dustbird.mail
 
-import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.junit4.createEmptyComposeRule
+import androidx.test.core.app.ActivityScenario
+import androidx.test.platform.app.InstrumentationRegistry
+import kotlinx.coroutines.runBlocking
 import androidx.compose.ui.test.onNodeWithText
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import java.util.Properties
@@ -14,11 +17,16 @@ import kotlin.test.assertTrue
 @RunWith(AndroidJUnit4::class)
 class DeviceSmokeTest {
     @get:Rule
-    val compose = createAndroidComposeRule<MainActivity>()
+    val compose = createEmptyComposeRule()
 
     @Test
-    fun launchShowsAppName() {
-        compose.onNodeWithText(compose.activity.getString(R.string.add_account_title_choose)).assertExists()
+    fun firstLaunchShowsTheServiceChoice() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        runBlocking { (context.applicationContext as MailApplication).container.maintenance.resetEverything() }
+        ActivityScenario.launch(MainActivity::class.java).use { scenario ->
+            scenario.onActivity { }
+            compose.onNodeWithText(context.getString(R.string.add_account_title_choose)).assertExists()
+        }
     }
 
     @Test

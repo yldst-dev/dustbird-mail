@@ -45,6 +45,7 @@ class IdleServiceTest {
     @Before
     fun setUp() {
         assumeTrue("host test server is not running", runCatching { Socket().use { it.connect(InetSocketAddress("10.0.2.2", 3993), 2000) } }.isSuccess)
+        runBlocking { container.maintenance.resetEverything() }
     }
 
     @After
