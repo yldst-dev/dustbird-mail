@@ -18,12 +18,15 @@ import com.sun.mail.imap.protocol.INTERNALDATE
 import com.sun.mail.imap.protocol.ListInfo
 import com.sun.mail.imap.protocol.RFC822SIZE
 import com.sun.mail.imap.protocol.UID
+import java.io.ByteArrayOutputStream
+import java.io.IOException
 import java.time.Instant
 import java.util.Properties
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 import javax.mail.Flags
 import javax.mail.Folder
+import javax.mail.MessagingException
 import javax.mail.Session
 import javax.mail.internet.MimeMessage
 import javax.mail.search.HeaderTerm
@@ -139,7 +142,18 @@ class JakartaImapSession(private val store: IMAPStore) : ImapSession {
     override fun fetchContent(path: String, uid: Long): ParsedContent? {
         val folder = ensureOpen(path)
         val message = folder.getMessageByUID(uid) as? IMAPMessage ?: return null
-        return MessageParser.content(message)
+        return try {
+            MessageParser.contentStrict(message)
+        } catch (_: MessagingException) {
+            fetchWhole(message)
+        } catch (_: IOException) {
+            fetchWhole(message)
+        }
+    }
+
+    private fun fetchWhole(message: IMAPMessage): ParsedContent {
+        val bytes = ByteArrayOutputStream().also { message.writeTo(it) }.toByteArray()
+        return MessageParser.contentStrict(MessageParser.parseRaw(bytes))
     }
 
     override fun setSeen(path: String, uid: Long, seen: Boolean) {

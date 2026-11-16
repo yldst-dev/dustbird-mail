@@ -22,10 +22,13 @@ class TestMailServer private constructor(
         fun start(
             users: Map<String, String>,
             bindHost: String = "127.0.0.1",
-            imapPort: Int = Fixtures.freePort(),
-            smtpPort: Int = Fixtures.freePort(),
+            imapPort: Int? = null,
+            smtpPort: Int? = null,
             keystore: File = Fixtures.file("test-server.p12"),
         ): TestMailServer {
+            val (freeImap, freeSmtp) = Fixtures.freePorts(2)
+            val imapPort = imapPort ?: freeImap
+            val smtpPort = smtpPort ?: freeSmtp
             System.setProperty("greenmail.tls.keystore.file", keystore.absolutePath)
             System.setProperty("greenmail.tls.keystore.password", Fixtures.PASSWORD)
             val urls = System.getProperty("greenmail.classpath").split(File.pathSeparator).map { File(it).toURI().toURL() }

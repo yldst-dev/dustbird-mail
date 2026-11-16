@@ -110,8 +110,7 @@ class SmtpSenderTest {
 
     @Test
     fun refusedConnectionIsNotSent() {
-        val port = Fixtures.freePort()
-        val outcome = JakartaSmtpSender.send(ServerEndpoint("localhost", port, TransportSecurity.STARTTLS), credentials, message())
+        val outcome = JakartaSmtpSender.send(ServerEndpoint("localhost", 1, TransportSecurity.STARTTLS), credentials, message())
         assertIs<SmtpOutcome.NotSent>(outcome)
     }
 }

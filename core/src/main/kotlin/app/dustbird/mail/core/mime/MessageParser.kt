@@ -74,6 +74,14 @@ object MessageParser {
         return ParsedContent(text.toString().ifBlank { null }, html.toString().ifBlank { null }, attachments)
     }
 
+    fun contentStrict(part: Part): ParsedContent {
+        val text = StringBuilder()
+        val html = StringBuilder()
+        val attachments = mutableListOf<AttachmentInfo>()
+        walk(part, text, html, attachments)
+        return ParsedContent(text.toString().ifBlank { null }, html.toString().ifBlank { null }, attachments)
+    }
+
     fun plainText(content: ParsedContent): String =
         content.text ?: content.html?.let { Jsoup.parse(it).wholeText().trim() } ?: ""
 

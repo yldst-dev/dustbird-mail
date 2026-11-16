@@ -166,7 +166,7 @@ class GreenMailGatewayTest {
 
     @Test
     fun unreachableServerIsClassified() {
-        val dead = ServerEndpoint("localhost", app.dustbird.mail.core.testing.Fixtures.freePort(), TransportSecurity.TLS)
+        val dead = ServerEndpoint("localhost", 1, TransportSecurity.TLS)
         assertEquals(ConnectFailure.UNREACHABLE, assertIs<CheckResult.Failed>(ConnectionChecks.imap(JakartaImapConnector, dead, alice)).failure)
     }
 
@@ -206,5 +206,51 @@ class GreenMailGatewayTest {
         connection.close()
         worker.join(5000)
         assertFalse(worker.isAlive, "idle loop did not stop after close")
+    }
+
+    private fun deliverMime(subject: String, build: (javax.mail.internet.MimeMessage) -> Unit) {
+        val session = javax.mail.Session.getInstance(java.util.Properties().apply { put("mail.smtp.ssl.enable", "true"); put("mail.smtp.auth", "true") })
+        val message = javax.mail.internet.MimeMessage(session).apply {
+            setFrom(javax.mail.internet.InternetAddress("bob@example.test"))
+            setRecipient(javax.mail.Message.RecipientType.TO, javax.mail.internet.InternetAddress("alice@example.test"))
+            setSubject(subject, "UTF-8")
+            build(this)
+            saveChanges()
+        }
+        session.getTransport("smtp").apply {
+            connect(server.host, server.smtpPort, bob.username, bob.secret)
+            sendMessage(message, message.allRecipients)
+            close()
+        }
+    }
+
+    @Test
+    fun alternativeAndAttachmentMailsAreReadOverImapWithLazyParts() {
+        deliverMime("대체 본문") { message ->
+            val alternative = javax.mail.internet.MimeMultipart("alternative")
+            alternative.addBodyPart(javax.mail.internet.MimeBodyPart().apply { setText("평문 버전", "UTF-8") })
+            alternative.addBodyPart(javax.mail.internet.MimeBodyPart().apply { setContent("<p>HTML 버전</p>", "text/html; charset=UTF-8") })
+            message.setContent(alternative)
+        }
+        deliverMime("첨부 메일") { message ->
+            val mixed = javax.mail.internet.MimeMultipart("mixed")
+            mixed.addBodyPart(javax.mail.internet.MimeBodyPart().apply { setText("본문 텍스트", "UTF-8") })
+            mixed.addBodyPart(javax.mail.internet.MimeBodyPart().apply {
+                setContent("attachment body", "text/plain")
+                fileName = "계약서.txt"
+                disposition = "attachment"
+            })
+            message.setContent(mixed)
+        }
+        JakartaImapConnector.connect(imap, alice).use { session ->
+            session.open("INBOX", readOnly = true)
+            val uids = session.listUids("INBOX", 1, null)
+            val alternative = session.fetchContent("INBOX", uids[0])!!
+            assertEquals("평문 버전", alternative.text)
+            assertEquals("<p>HTML 버전</p>", alternative.html)
+            val mixed = session.fetchContent("INBOX", uids[1])!!
+            assertEquals("본문 텍스트", mixed.text)
+            assertEquals(listOf("계약서.txt"), mixed.attachments.map { it.fileName })
+        }
     }
 }
