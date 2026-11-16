@@ -91,6 +91,7 @@ dependencies {
     androidTestImplementation(libs.test.ext.junit)
     androidTestImplementation(libs.test.runner)
     androidTestImplementation(libs.test.rules)
+    androidTestImplementation(libs.work.testing)
     androidTestImplementation(kotlin("test"))
     androidTestImplementation(libs.coroutines.core)
     androidTestImplementation(libs.android.mail)
