@@ -1,0 +1,146 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="add_account_navigate_back">뒤로 가기</string>
+    <string name="add_account_progress">계정 추가 진행률</string>
+    <string name="add_account_next">다음</string>
+
+    <string name="add_account_title_choose">메일 서비스 고르기</string>
+    <string name="add_account_title_prepare">먼저 준비할 것</string>
+    <string name="add_account_title_form">계정 정보</string>
+    <string name="add_account_title_verify">로그인 확인</string>
+    <string name="add_account_title_sync">메일함 불러오기</string>
+    <string name="add_account_title_roles">폴더 확인</string>
+
+    <string name="add_account_choose_intro">추가할 메일 서비스를 골라 주세요. 모든 계정은 IMAP과 SMTP로 연결합니다.</string>
+    <string name="add_account_service_icloud">iCloud 메일</string>
+    <string name="add_account_service_gmail">Gmail</string>
+    <string name="add_account_service_naver">네이버 메일</string>
+    <string name="add_account_service_custom">직접 설정</string>
+    <string name="add_account_service_icloud_hint">앱 전용 암호가 필요합니다</string>
+    <string name="add_account_service_gmail_hint">앱 비밀번호가 필요합니다</string>
+    <string name="add_account_service_naver_hint">애플리케이션 비밀번호가 필요합니다</string>
+    <string name="add_account_service_custom_hint">서버 주소를 직접 입력합니다</string>
+
+    <string name="add_account_secret_icloud">앱 전용 암호</string>
+    <string name="add_account_secret_gmail">앱 비밀번호</string>
+    <string name="add_account_secret_naver">애플리케이션 비밀번호</string>
+    <string name="add_account_secret_custom">비밀번호</string>
+
+    <string name="add_account_prepare_warning">%1$s에는 평소 쓰는 로그인 비밀번호로 로그인할 수 없습니다. 아래 준비를 마치고, 서비스에서 따로 만든 %2$s만 사용해 주세요.</string>
+    <string name="add_account_prepare_custom_intro">서버 주소와 로그인 정보를 직접 입력합니다. 서비스가 앱 비밀번호를 요구한다면 평소 쓰는 로그인 비밀번호 대신 앱 비밀번호를 사용해 주세요.</string>
+    <string name="add_account_prepare_ack">준비를 마쳤습니다</string>
+
+    <string name="add_account_prepare_icloud_1">Apple 계정에서 2단계 인증을 켭니다.</string>
+    <string name="add_account_prepare_icloud_2">Apple 계정의 보안 페이지에서 앱 전용 암호(앱 암호)를 만든 뒤, 그 암호를 이 앱에 입력합니다.</string>
+    <string name="add_account_prepare_icloud_3">서버 설정은 이 앱이 자동으로 채웁니다.</string>
+
+    <string name="add_account_prepare_gmail_1">개인 Google 계정이어야 합니다. 회사나 학교 계정, 보안 키로만 2단계 인증을 쓰는 계정, 고급 보호 프로그램에 가입한 계정은 앱 비밀번호를 만들 수 없습니다. 이 앱은 Google 로그인(OAuth)을 지원하지 않아서 이런 계정은 추가할 수 없습니다.</string>
+    <string name="add_account_prepare_gmail_2">Google 계정에서 2단계 인증을 켭니다.</string>
+    <string name="add_account_prepare_gmail_3">2단계 인증을 켠 뒤 16자리 앱 비밀번호를 만들고, 그 비밀번호를 이 앱에 입력합니다. Google은 앱 비밀번호를 권장하지 않지만, 이 앱은 앱 비밀번호로만 로그인합니다.</string>
+    <string name="add_account_prepare_gmail_4">개인 계정은 2025년 1월부터 IMAP이 항상 켜져 있어서 따로 켤 필요가 없습니다.</string>
+    <string name="add_account_prepare_gmail_5">Google 계정 하나에 동시에 연결할 수 있는 메일 앱은 최대 15개입니다.</string>
+
+    <string name="add_account_prepare_naver_1">PC 브라우저에서 네이버ID &gt; 보안설정 &gt; 기본보안설정 &gt; 2단계 인증 &gt; 관리로 가서 2단계 인증을 켭니다. 이 설정은 PC에서만 할 수 있습니다.</string>
+    <string name="add_account_prepare_naver_2">같은 곳에서 애플리케이션 비밀번호를 만듭니다. 비밀번호는 만들 때 한 번만 보여 주므로, 바로 이 앱에 입력하거나 따로 적어 두세요. 2025년 6월 24일부터는 평소 쓰는 비밀번호로 로그인할 수 없습니다.</string>
+    <string name="add_account_prepare_naver_3">네이버 메일 웹에서 환경설정 &gt; POP3/IMAP 설정 &gt; IMAP/SMTP 설정으로 가서 \'IMAP/SMTP 사용\'을 \'사용함\'으로 바꿉니다.</string>
+    <string name="add_account_prepare_naver_4">90일 동안 쓰지 않으면 네이버가 이 설정을 \'사용 안 함\'으로 되돌립니다.</string>
+    <string name="add_account_prepare_naver_5">로그인 이름은 네이버 메일 주소 전체입니다.</string>
+
+    <string name="add_account_prepare_custom_1">받는 서버(IMAP)와 보내는 서버(SMTP)의 주소, 포트 번호, 보안 방식(TLS 또는 STARTTLS)을 준비해 주세요.</string>
+    <string name="add_account_prepare_custom_2">로그인 이름과 비밀번호를 준비해 주세요.</string>
+    <string name="add_account_prepare_custom_3">암호화되지 않은 연결은 지원하지 않습니다. 서버가 TLS나 STARTTLS를 제공해야 합니다.</string>
+
+    <string name="add_account_field_address">메일 주소</string>
+    <string name="add_account_field_display_name">계정 이름</string>
+    <string name="add_account_field_display_name_hint">계정 정보 화면에 보이는 이름입니다.</string>
+    <string name="add_account_field_label">짧은 이름</string>
+    <string name="add_account_field_label_hint">목록에서 계정을 구분하는 짧은 이름입니다.</string>
+    <string name="add_account_field_identity_name">보내는 사람 이름</string>
+    <string name="add_account_field_identity_name_hint">받는 사람에게 보이는 이름입니다. 비워 둘 수 있습니다.</string>
+    <string name="add_account_password_hint">평소 쓰는 로그인 비밀번호는 쓸 수 없습니다.</string>
+    <string name="add_account_password_show">보기</string>
+    <string name="add_account_password_hide">숨기기</string>
+    <string name="add_account_advanced">고급 설정</string>
+    <string name="add_account_advanced_expanded">펼쳐짐</string>
+    <string name="add_account_advanced_collapsed">접힘</string>
+    <string name="add_account_field_username">로그인 이름</string>
+    <string name="add_account_field_username_hint">서버에 로그인할 때 쓰는 이름입니다.</string>
+    <string name="add_account_section_imap">받는 서버 (IMAP)</string>
+    <string name="add_account_section_smtp">보내는 서버 (SMTP)</string>
+    <string name="add_account_field_host">서버 주소</string>
+    <string name="add_account_field_port">포트</string>
+    <string name="add_account_security">보안 방식</string>
+    <string name="add_account_security_tls">TLS</string>
+    <string name="add_account_security_starttls">STARTTLS</string>
+    <string name="add_account_security_note">암호화되지 않은 연결은 지원하지 않습니다.</string>
+    <string name="add_account_form_note">다음 단계에서 받는 서버와 보내는 서버에 차례로 로그인해 봅니다. 확인용 메일은 보내지 않습니다.</string>
+    <string name="add_account_form_verify">로그인 확인하기</string>
+
+    <string name="add_account_error_address">메일 주소를 확인해 주세요. 예: user@example.com</string>
+    <string name="add_account_error_required">비워 둘 수 없습니다.</string>
+    <string name="add_account_error_host">서버 주소는 imap.example.com처럼 공백이나 http:// 없이 입력해 주세요.</string>
+    <string name="add_account_error_port">포트는 1부터 65535 사이의 숫자여야 합니다.</string>
+
+    <string name="add_account_verify_waiting">앞 단계가 끝나길 기다리는 중입니다.</string>
+    <string name="add_account_verify_running">로그인하는 중입니다.</string>
+    <string name="add_account_verify_ok">로그인할 수 있습니다.</string>
+    <string name="add_account_verify_skipped">받는 서버 문제를 먼저 해결해 주세요.</string>
+    <string name="add_account_verify_success_title">두 서버 모두 로그인할 수 있습니다</string>
+    <string name="add_account_verify_success_body">받는 서버와 보내는 서버의 로그인이 확인되었습니다. 실제 발송, 실제 수신, 보낸 편지함에 사본이 남는지는 메일을 쓰면서 차례로 확인합니다. 확인용 메일은 보내지 않았습니다.</string>
+    <string name="add_account_verify_save">계정 추가하기</string>
+    <string name="add_account_verify_edit">입력 수정하기</string>
+    <string name="add_account_verify_retry">다시 확인하기</string>
+    <string name="add_account_saving">저장하는 중입니다.</string>
+
+    <string name="add_account_fail_auth_title">로그인이 거부되었습니다</string>
+    <string name="add_account_fail_auth_body">로그인 이름이나 비밀번호가 맞지 않거나, 평소 쓰는 로그인 비밀번호를 입력했을 수 있습니다. 서비스에서 따로 만든 비밀번호를 다시 입력해 주세요.</string>
+    <string name="add_account_fail_auth_icloud">Apple 계정에서 2단계 인증을 켠 뒤 만든 앱 전용 암호인지 확인해 주세요. Apple 안내에 따르면 받는 서버의 사용자 이름은 보통 메일 주소의 @ 앞부분이고, 보내는 서버의 사용자 이름은 전체 주소입니다. 계속 거부되면 고급 설정의 로그인 이름에 @ 앞부분만 입력해 보세요. 그래도 연결되지 않으면 전체 주소로 되돌려 보세요.</string>
+    <string name="add_account_fail_auth_gmail">2단계 인증을 켠 개인 Google 계정에서 만든 16자리 앱 비밀번호인지 확인해 주세요. 회사나 학교 계정 등은 앱 비밀번호를 만들 수 없어서 이 앱에 추가할 수 없습니다.</string>
+    <string name="add_account_fail_auth_naver">PC에서 만든 애플리케이션 비밀번호인지 확인해 주세요. 2025년 6월 24일부터 평소 쓰는 비밀번호는 쓸 수 없습니다. 로그인 이름은 네이버 메일 주소 전체여야 합니다.</string>
+    <string name="add_account_fail_auth_custom">로그인 이름과 비밀번호를 서비스 안내와 비교해 주세요. 서비스가 앱 비밀번호를 요구하면 평소 쓰는 비밀번호로는 로그인되지 않습니다.</string>
+
+    <string name="add_account_fail_tls_title">안전한 연결을 만들지 못했습니다</string>
+    <string name="add_account_fail_tls_body">서버의 인증서나 서버 주소가 맞지 않거나, 서버가 암호화 연결을 제공하지 않습니다. 이 앱은 암호화되지 않은 연결을 허용하지 않습니다. 서버 주소, 포트 번호, 보안 방식(TLS 또는 STARTTLS)이 서로 맞는지 확인해 주세요.</string>
+
+    <string name="add_account_fail_unreachable_title">서버에 연결하지 못했습니다</string>
+    <string name="add_account_fail_unreachable_body">인터넷 연결 상태, 서버 주소, 포트 번호를 확인해 주세요.</string>
+
+    <string name="add_account_fail_disabled_title">서버가 접속을 막고 있습니다</string>
+    <string name="add_account_fail_disabled_body">메일 서비스 쪽에서 IMAP 또는 SMTP 사용이 꺼져 있을 수 있습니다.</string>
+    <string name="add_account_fail_disabled_naver">네이버 메일 웹에서 환경설정 &gt; POP3/IMAP 설정 &gt; IMAP/SMTP 설정으로 가서 \'IMAP/SMTP 사용\'을 \'사용함\'으로 바꿔 주세요. 90일 동안 쓰지 않으면 네이버가 \'사용 안 함\'으로 되돌리므로, 오래 쓰지 않았다면 다시 확인해 보세요.</string>
+    <string name="add_account_fail_disabled_gmail">개인 Google 계정은 IMAP이 항상 켜져 있습니다. Google Workspace 계정이라면 IMAP 사용 여부를 관리자가 정하므로 관리자에게 문의해 주세요.</string>
+    <string name="add_account_fail_disabled_default">서비스의 메일 설정에서 IMAP과 SMTP 사용 여부를 확인해 주세요.</string>
+
+    <string name="add_account_fail_other_title">원인을 알 수 없는 오류입니다</string>
+    <string name="add_account_fail_other_body">입력한 값을 다시 확인한 뒤 다시 시도해 주세요.</string>
+    <string name="add_account_fail_other_detail">서버가 알려 준 내용 (참고용)</string>
+
+    <string name="add_account_save_duplicate_mailbox">이미 등록된 메일함입니다. 같은 서버와 로그인 이름으로 추가한 계정이 있습니다.</string>
+    <string name="add_account_save_invalid_address">메일 주소 형식이 올바르지 않습니다. 입력을 수정해 주세요.</string>
+    <string name="add_account_save_duplicate_address">이미 다른 계정에서 쓰고 있는 메일 주소입니다.</string>
+    <string name="add_account_save_duplicate_label">받는 주소에 붙일 이름표가 이미 쓰이고 있습니다.</string>
+    <string name="add_account_save_blank_label">이름표를 비워 둘 수 없습니다.</string>
+    <string name="add_account_save_other">계정을 저장하지 못했습니다. 잠시 뒤 다시 시도해 주세요.</string>
+    <string name="add_account_save_storage">기기에 비밀번호를 안전하게 보관하지 못해서 계정을 추가하지 못했습니다. 다시 시도해 주세요.</string>
+
+    <string name="add_account_sync_running">메일함 목록과 최근 메일을 불러오는 중입니다.</string>
+    <string name="add_account_sync_done_title">메일함을 불러왔습니다</string>
+    <string name="add_account_sync_done_body">계정을 추가하고 최근 메일을 불러왔습니다.</string>
+    <string name="add_account_sync_done_roles">보낸 편지함 같은 일부 폴더는 서비스마다 이름이 달라서, 다음 단계에서 확인이 필요합니다.</string>
+    <string name="add_account_sync_failed_lead">계정은 저장되었지만 메일을 불러오지 못했습니다.</string>
+    <string name="add_account_sync_reauth_title">로그인이 거부되었습니다</string>
+    <string name="add_account_sync_reauth_body">계정은 저장되었지만 메일을 불러오는 중에 서버가 로그인을 거부했습니다. 비밀번호를 다시 확인해야 할 수 있습니다.</string>
+    <string name="add_account_sync_retry">다시 불러오기</string>
+    <string name="add_account_sync_skip">나중에 하기</string>
+    <string name="add_account_sync_finish">메일함으로 이동</string>
+
+    <string name="add_account_roles_intro">폴더 이름은 서비스마다 다릅니다. 이 앱은 폴더의 용도를 임의로 정하지 않고, 확인이 필요한 것만 여기서 묻습니다. 지정하지 않은 폴더는 이 앱에서 쓰지 않습니다.</string>
+    <string name="add_account_role_sent">보낸 편지함</string>
+    <string name="add_account_role_drafts">임시 보관함</string>
+    <string name="add_account_role_spam">스팸 메일함</string>
+    <string name="add_account_roles_candidates">이름이 비슷한 폴더가 있습니다. 맞는 폴더를 골라 주세요.</string>
+    <string name="add_account_roles_missing">맞는 폴더를 찾지 못했습니다. 서버의 폴더 중에서 직접 고르거나 건너뛸 수 있습니다.</string>
+    <string name="add_account_roles_none">지정하지 않음</string>
+    <string name="add_account_roles_taken">다른 용도로 선택했습니다</string>
+    <string name="add_account_roles_done">메일함으로 이동</string>
+</resources>
