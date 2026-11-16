@@ -20,6 +20,8 @@ import com.sun.mail.imap.protocol.RFC822SIZE
 import com.sun.mail.imap.protocol.UID
 import java.time.Instant
 import java.util.Properties
+import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
 import javax.mail.Flags
 import javax.mail.Folder
 import javax.mail.Session
@@ -174,7 +176,18 @@ class JakartaImapSession(private val store: IMAPStore) : ImapSession {
             override fun messagesAdded(event: javax.mail.event.MessageCountEvent) = onChange()
             override fun messagesRemoved(event: javax.mail.event.MessageCountEvent) = onChange()
         })
-        while (store.isConnected) folder.idle(true)
+        val watchdog = Executors.newSingleThreadScheduledExecutor { task -> Thread(task, "imap-idle-refresh").apply { isDaemon = true } }
+        watchdog.scheduleWithFixedDelay(
+            { runCatching { folder.doCommand { protocol -> protocol.noop(); null } } },
+            IDLE_REFRESH_MINUTES,
+            IDLE_REFRESH_MINUTES,
+            TimeUnit.MINUTES,
+        )
+        try {
+            while (store.isConnected) folder.idle(true)
+        } finally {
+            watchdog.shutdownNow()
+        }
     }
 
     override fun close() {
@@ -220,6 +233,7 @@ class JakartaImapSession(private val store: IMAPStore) : ImapSession {
     companion object {
         private const val PREVIEW_BYTES = 16384
         private const val MAX_UIDS_PER_COMMAND = 100
+        private const val IDLE_REFRESH_MINUTES = 25L
 
         fun uidSet(uids: List<Long>): String {
             val sorted = uids.sorted()

@@ -23,7 +23,7 @@ import app.dustbird.mail.ui.outbox.OutboxRoute
 import kotlinx.coroutines.flow.first
 
 @Composable
-fun MailApp(openMessageId: Long?) {
+fun MailApp(openMessageId: Long?, openAccountId: Long?) {
     val container = LocalAppContainer.current
     val start by produceState<String?>(initialValue = null) {
         value = if (container.accounts.accounts.first().isEmpty()) Routes.ADD_ACCOUNT else Routes.MAILBOX
@@ -33,6 +33,9 @@ fun MailApp(openMessageId: Long?) {
 
     LaunchedEffect(openMessageId) {
         if (openMessageId != null && startDestination == Routes.MAILBOX) navController.navigate(Routes.message(openMessageId))
+    }
+    LaunchedEffect(openAccountId) {
+        if (openAccountId != null && startDestination == Routes.MAILBOX) navController.navigate(Routes.accountDetail(openAccountId))
     }
 
     NavHost(navController = navController, startDestination = startDestination) {

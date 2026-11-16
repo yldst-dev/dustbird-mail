@@ -18,16 +18,17 @@ import app.dustbird.mail.ui.theme.DustbirdTheme
 
 class MainActivity : ComponentActivity() {
     private var openMessageId by mutableStateOf<Long?>(null)
+    private var openAccountId by mutableStateOf<Long?>(null)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-        openMessageId = messageIdFrom(intent)
+        readExtras(intent)
         val container = (application as MailApplication).container
         setContent {
             DustbirdTheme {
                 CompositionLocalProvider(LocalAppContainer provides container) {
-                    Surface(Modifier.fillMaxSize()) { MailApp(openMessageId) }
+                    Surface(Modifier.fillMaxSize()) { MailApp(openMessageId, openAccountId) }
                 }
             }
         }
@@ -35,12 +36,16 @@ class MainActivity : ComponentActivity() {
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
-        openMessageId = messageIdFrom(intent)
+        readExtras(intent)
     }
 
-    private fun messageIdFrom(intent: Intent?): Long? = intent?.getLongExtra(EXTRA_MESSAGE_ID, -1L)?.takeIf { it >= 0 }
+    private fun readExtras(intent: Intent?) {
+        openMessageId = intent?.getLongExtra(EXTRA_MESSAGE_ID, -1L)?.takeIf { it >= 0 }
+        openAccountId = intent?.getLongExtra(EXTRA_ACCOUNT_ID, -1L)?.takeIf { it >= 0 }
+    }
 
     companion object {
         const val EXTRA_MESSAGE_ID = "app.dustbird.mail.extra.MESSAGE_ID"
+        const val EXTRA_ACCOUNT_ID = "app.dustbird.mail.extra.ACCOUNT_ID"
     }
 }

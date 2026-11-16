@@ -147,6 +147,10 @@ class SyncService(
         db.accounts().getAll().map { account -> async { account.id to syncAccount(account.id) } }.awaitAll().toMap()
     }
 
+    suspend fun syncAccounts(ids: Collection<Long>): Map<Long, SyncOutcome> = coroutineScope {
+        ids.map { id -> async { id to syncAccount(id) } }.awaitAll().toMap()
+    }
+
     suspend fun syncAccount(accountId: Long): SyncOutcome = locks.getOrPut(accountId) { Mutex() }.withLock {
         publish(accountId, AccountSyncState.Syncing)
         val outcome = try {

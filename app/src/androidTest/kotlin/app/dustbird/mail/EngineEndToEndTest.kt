@@ -48,6 +48,7 @@ private class RecordingNotifier : MailNotifier {
     override fun notifyNew(account: MailAccount, mails: List<NewMail>) { batches += account.id to mails }
     override fun reauthRequired(account: MailAccount) { reauth += account.id }
     override fun cancel(accountId: Long) = Unit
+    override fun prune(existingAccountIds: Set<Long>) = Unit
 }
 
 @RunWith(AndroidJUnit4::class)

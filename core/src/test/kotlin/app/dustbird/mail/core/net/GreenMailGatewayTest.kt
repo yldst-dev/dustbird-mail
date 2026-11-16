@@ -193,4 +193,18 @@ class GreenMailGatewayTest {
             assertEquals(0, session.removeByMessageId("INBOX", "<never@example.test>"))
         }
     }
+
+    @Test
+    fun idleReportsNewMailPromptly() {
+        val signal = java.util.concurrent.CountDownLatch(1)
+        val connection = JakartaImapConnector.connect(imap, alice)
+        assertTrue("IDLE" in connection.capabilities())
+        val worker = Thread { runCatching { connection.idle("INBOX") { signal.countDown() } } }.apply { isDaemon = true; start() }
+        Thread.sleep(500)
+        deliver("<idle-1@example.test>")
+        assertTrue(signal.await(10, java.util.concurrent.TimeUnit.SECONDS), "no IDLE notification arrived")
+        connection.close()
+        worker.join(5000)
+        assertFalse(worker.isAlive, "idle loop did not stop after close")
+    }
 }

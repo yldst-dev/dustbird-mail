@@ -53,6 +53,7 @@ class SendService(
     private val credentials: CredentialStore,
     smtp: SmtpSender,
     imap: ImapConnector,
+    private val onQueued: () -> Unit = {},
     pause: (Long) -> Unit = { Thread.sleep(it) },
 ) {
     val items: Flow<List<OutboxEntity>> = db.outbox().observeAll()
@@ -106,6 +107,7 @@ class SendService(
             ),
         )
         drafts.delete(draftId)
+        onQueued()
         return EnqueueResult.Queued(id)
     }
 
@@ -121,6 +123,8 @@ class SendService(
     suspend fun processAccount(accountId: Long) = lock(accountId).withLock {
         db.outbox().byAccountAndStates(accountId, listOf(SendState.QUEUED)).forEach { send(it) }
     }
+
+    suspend fun hasQueued(): Boolean = db.accounts().getAll().any { db.outbox().byAccountAndStates(it.id, listOf(SendState.QUEUED)).isNotEmpty() }
 
     suspend fun retry(id: Long) = transition(id, SendEvent.UserRetry) { processAccount(it.accountId) }
 

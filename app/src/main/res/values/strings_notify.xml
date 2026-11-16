@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="notify_group_accounts">계정별 메일 알림</string>
+    <string name="notify_channel_reauth">다시 로그인이 필요한 계정</string>
+    <string name="notify_channel_idle">실시간 수신 유지</string>
+    <string name="notify_unknown_sender">보낸 사람 없음</string>
+    <string name="notify_no_subject">(제목 없음)</string>
+    <string name="notify_unknown_identity">수신 주소 미확인</string>
+    <string name="notify_subtext">%1$s · %2$s</string>
+    <string name="notify_public_title">새 메일</string>
+    <string name="notify_public_text">%1$s 계정에 새 메일이 도착했습니다</string>
+    <string name="notify_summary_title">%1$s</string>
+    <string name="notify_summary_text">새 메일 %1$d건</string>
+    <string name="notify_reauth_title">%1$s 계정에 다시 로그인해 주세요</string>
+    <string name="notify_reauth_text">저장된 암호가 거부되었거나 사용할 수 없습니다. 알림을 눌러 앱 전용 암호를 다시 입력해 주세요.</string>
+    <string name="notify_idle_title">메일 실시간 수신 중</string>
+    <string name="notify_idle_text">%1$d개 계정의 연결을 유지하고 있습니다</string>
+</resources>
