@@ -157,7 +157,7 @@ class SyncService(
             run(accountId)
             SyncOutcome.Synced
         } catch (_: MissingCredentialException) {
-            SyncOutcome.NeedsReauth
+            SyncOutcome.NeedsReauth.also { markNeedsReauth(accountId) }
         } catch (error: Exception) {
             when (val failure = ConnectFailures.classify(error)) {
                 ConnectFailure.AUTH, ConnectFailure.SERVICE_DISABLED -> SyncOutcome.NeedsReauth.also { markNeedsReauth(accountId) }
