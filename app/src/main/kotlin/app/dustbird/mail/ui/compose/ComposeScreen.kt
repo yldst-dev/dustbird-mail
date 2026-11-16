@@ -246,18 +246,18 @@ private fun ComposeForm(vm: ComposeViewModel, phase: SendPhase, busy: Boolean, p
     LaunchedEffect(Unit) {
         if (!focused) {
             focused = true
-            if (vm.to.chips.isEmpty()) toFocus.requestFocus() else bodyFocus.requestFocus()
+            if (vm.to.chips.isEmpty()) toFocus.focus() else bodyFocus.focus()
         }
     }
     LaunchedEffect(focusCc) {
         if (focusCc) {
-            ccFocus.requestFocus()
+            ccFocus.focus()
             focusCc = false
         }
     }
     LaunchedEffect(focusBcc) {
         if (focusBcc) {
-            bccFocus.requestFocus()
+            bccFocus.focus()
             focusBcc = false
         }
     }

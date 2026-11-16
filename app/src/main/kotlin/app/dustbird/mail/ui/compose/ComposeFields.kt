@@ -253,7 +253,7 @@ internal fun RecipientRow(
                         enabled = enabled,
                         onEdit = {
                             field.edit(chip)
-                            focusRequester.requestFocus()
+                            focusRequester.focus()
                         },
                         onRemove = { field.remove(chip) },
                     )
@@ -380,4 +380,8 @@ internal fun FieldDivider() = HorizontalDivider(color = MaterialTheme.colorSchem
 @Composable
 internal fun TextActionButton(@StringRes text: Int, onClick: () -> Unit, modifier: Modifier = Modifier) {
     TextButton(onClick = onClick, modifier = modifier.heightIn(min = 48.dp)) { Text(stringResource(text)) }
+}
+
+internal fun FocusRequester.focus() {
+    runCatching { requestFocus() }
 }

@@ -147,11 +147,15 @@ class ComposeViewModel(
         get() = groups.size > 1
 
     private val saveMutex = Mutex()
+    @Volatile
     private var lastSaved: DraftContent? = null
+    @Volatile
     private var lastSynced: DraftContent? = null
     private var inReplyTo: String? = null
     private var references: List<String> = emptyList()
+    @Volatile
     private var sealed = false
+    @Volatile
     private var discarded = false
     private var subjectAsked = false
     private var senderChecked = false
