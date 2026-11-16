@@ -200,7 +200,7 @@ class AccountsScreenTest {
         var added = 0
         kit.show { AccountsRoute(onBack = {}, onAdd = { added++ }, onOpenAccount = {}) }
         kit.waitForText(kit.string(R.string.accounts_empty_title))
-        compose.onNodeWithText(kit.string(R.string.accounts_add)).performClick()
+        compose.onNodeWithText(kit.string(R.string.accounts_add), useUnmergedTree = true).performClick()
         assertEquals(1, added)
     }
 }
