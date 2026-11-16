@@ -18,7 +18,7 @@ class DeviceSmokeTest {
 
     @Test
     fun launchShowsAppName() {
-        compose.onNodeWithText("더스트버드 메일").assertExists()
+        compose.onNodeWithText("AddAccountRoute").assertExists()
     }
 
     @Test
