@@ -99,7 +99,10 @@ fun ReauthForm(reauth: Reauth, onSubmit: (String) -> Unit) {
                 CheckLine(R.string.accounts_stage_smtp_auth, reauth.smtp)
             }
             Reauth.StoreFailed -> Text(stringResource(R.string.accounts_reauth_store_failed), color = MaterialTheme.colorScheme.error, fontWeight = FontWeight.Bold)
-            Reauth.Done -> Text(stringResource(R.string.accounts_reauth_done), fontWeight = FontWeight.Bold)
+            is Reauth.Done -> {
+                Text(stringResource(R.string.accounts_reauth_done), fontWeight = FontWeight.Bold)
+                if (reauth.smtp is CheckResult.Failed) CheckLine(R.string.accounts_stage_smtp_auth, reauth.smtp)
+            }
         }
     }
 }

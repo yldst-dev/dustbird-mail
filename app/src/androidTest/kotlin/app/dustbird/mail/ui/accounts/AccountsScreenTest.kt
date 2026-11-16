@@ -69,10 +69,7 @@ internal class AccountManageTestKit(private val compose: ComposeContentTestRule)
         db = db,
     )
 
-    fun close() {
-        container.scope.cancel()
-        db.close()
-    }
+    fun close() = container.scope.cancel()
 
     fun string(@StringRes id: Int, vararg args: Any): String = context.getString(id, *args)
 

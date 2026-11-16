@@ -42,7 +42,7 @@ sealed interface Reauth {
     data object Checking : Reauth
     data class Failed(val imap: CheckResult, val smtp: CheckResult) : Reauth
     data object StoreFailed : Reauth
-    data object Done : Reauth
+    data class Done(val smtp: CheckResult) : Reauth
 }
 
 sealed interface TestSend {
@@ -128,7 +128,7 @@ class AccountDetailViewModel(private val container: AppContainer, private val ac
             } catch (_: Exception) {
                 false
             }
-            _reauth.value = if (stored) Reauth.Done else Reauth.StoreFailed
+            _reauth.value = if (stored) Reauth.Done(smtp) else Reauth.StoreFailed
             if (stored) container.sync.syncAccount(accountId)
         }
     }
