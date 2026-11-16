@@ -106,3 +106,15 @@ jsoup의 허용 목록으로 정제하고(스크립트, 이벤트 속성, 위험
 ## 16. 화면 구현 방식
 
 화면은 다섯 곳(계정 추가, 계정 관리, 목록과 발송함, 메일 상세, 작성)을 `docs/ui-brief.md`의 공통 규칙으로 병렬 작업해서 병합했습니다. 병합 뒤 실제 렌더링에서 시스템 액션 바가 Compose 제목을 가리는 문제와 빈 본문 문제를 찾아 고쳤습니다.
+
+## 17. 사전에 제안하지 않고 추가한 의존성과 예외
+
+요청에 없던 추가 항목입니다. 필요하다고 판단해서 먼저 넣었고, 빼려면 아래 사유를 보고 결정하세요.
+
+- jsoup 1.24.1: HTML 메일 정제에 필요합니다(정규식 정제는 안전하지 않아서 직접 만들지 않았습니다).
+- `androidx.compose.material:material-icons-core`: 아이콘에 필요합니다. 확장판은 크기 때문에 쓰지 않았습니다.
+- `androidx.compose.material3.adaptive`(adaptive, adaptive-layout, adaptive-navigation 1.3.0): 폴더블 펼친 화면의 목록과 상세 분할에 필요합니다.
+- 테스트 전용: GreenMail 2.1.15, `androidx.test:rules`, `androidx.work:work-testing`.
+- HTML 본문 보안 정책에 `font-src https://fonts.dustbird.invalid`를 추가했습니다. 내장 서체를 WebView에서 쓰려는 것이며 이 가짜 주소의 요청은 앱이 가로채서 앱 안의 서체 파일로만 응답하고 다른 글꼴 요청은 모두 막습니다. 빼려면 이 항목과 `ResourcePolicy`의 서체 분기를 지우면 되고, 그러면 본문 서체가 기본 산세리프로 바뀝니다.
+- 디버그 빌드는 `10.0.2.2` 한 곳에 대해서만 테스트용 인증서(`testfixtures/emulator-server.pem`)를 신뢰합니다. 그 인증서의 개인 키(`testfixtures/*.p12`)가 저장소에 있습니다. 보호할 비밀이 없는 일회용 키이지만, 디버그 APK를 기기에 설치하면 이 신뢰 설정이 함께 들어간다는 점을 알고 쓰세요. 릴리스 빌드에는 이 설정이 없습니다.
+- 작업은 `build/mail-client` 브랜치에 있고 `master`에는 병합하지 않았습니다.
