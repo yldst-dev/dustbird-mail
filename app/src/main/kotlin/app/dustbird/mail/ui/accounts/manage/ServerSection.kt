@@ -21,7 +21,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.Role
@@ -40,7 +40,7 @@ import kotlinx.coroutines.launch
 @Composable
 fun ServerSection(account: MailAccount) {
     val container = LocalAppContainer.current
-    val resources = LocalContext.current.resources
+    val resources = LocalResources.current
     val scope = rememberCoroutineScope()
     var expanded by rememberSaveable { mutableStateOf(false) }
     var username by rememberSaveable(account.id) { mutableStateOf(account.username) }

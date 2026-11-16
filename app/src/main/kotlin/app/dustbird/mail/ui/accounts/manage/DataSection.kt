@@ -11,7 +11,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.liveRegion
@@ -26,7 +26,7 @@ import kotlinx.coroutines.launch
 @Composable
 fun DataSection(account: MailAccount, removal: Removal, onRemove: (Boolean) -> Unit, onCancelRemoval: () -> Unit) {
     val container = LocalAppContainer.current
-    val resources = LocalContext.current.resources
+    val resources = LocalResources.current
     val scope = rememberCoroutineScope()
     var confirmCache by rememberSaveable { mutableStateOf(false) }
     var confirmDelete by rememberSaveable { mutableStateOf(false) }

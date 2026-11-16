@@ -24,7 +24,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.contentDescription
@@ -59,7 +59,7 @@ fun IdentitiesSection(
     onTestSend: (MailIdentity, String, String) -> Unit,
 ) {
     val container = LocalAppContainer.current
-    val resources = LocalContext.current.resources
+    val resources = LocalResources.current
     val scope = rememberCoroutineScope()
     var editing by rememberSaveable { mutableStateOf<Long?>(null) }
     var deleting by rememberSaveable { mutableStateOf<Long?>(null) }

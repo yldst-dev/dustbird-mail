@@ -3,7 +3,6 @@
     <string name="accounts_back">뒤로 가기</string>
     <string name="accounts_cancel">취소</string>
     <string name="accounts_save">저장</string>
-    <string name="accounts_loading">불러오는 중입니다.</string>
 
     <string name="accounts_title">계정</string>
     <string name="accounts_add">계정 추가</string>
