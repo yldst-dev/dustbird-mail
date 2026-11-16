@@ -41,7 +41,10 @@ class IdleService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        startForeground(0)
+        if (!enterForeground(0)) {
+            stopSelf()
+            return START_NOT_STICKY
+        }
         val container = (application as MailApplication).container
         scope.launch {
             container.accounts.accounts
@@ -50,11 +53,19 @@ class IdleService : Service() {
                 .collect { ids ->
                     jobs.keys.filter { it !in ids }.forEach { jobs.remove(it)?.cancel() }
                     ids.filter { it !in jobs }.forEach { id -> jobs[id] = launch { keepAlive(id) } }
-                    startForeground(ids.size)
-                    if (ids.isEmpty()) stopSelf()
+                    if (ids.isEmpty() || !enterForeground(ids.size)) stopSelf()
                 }
         }
-        return START_STICKY
+        return START_NOT_STICKY
+    }
+
+    private fun enterForeground(accounts: Int): Boolean = try {
+        startForeground(accounts)
+        true
+    } catch (_: IllegalStateException) {
+        false
+    } catch (_: SecurityException) {
+        false
     }
 
     override fun onDestroy() {

@@ -7,6 +7,8 @@
 - 이전 클라이언트에서 확인: iCloud 계정 하나가 기존 서버의 메일 클라이언트에서 실제 수발신된 사실(이 앱에서 확인한 것은 아닙니다)
 - 미확인: 위 어디에서도 확인하지 못한 것. 사실로 단정하지 않고 실제 계정으로 점검합니다.
 
+로그인 없이 앱의 연결 설정(`SessionConfig`)으로 실제 서버 8곳에 접속한 점검도 했습니다. 수신 imap.mail.me.com, imap.gmail.com, imap.naver.com(993 TLS)과 발신 smtp.mail.me.com:587(STARTTLS), smtp.gmail.com:465(TLS)와 587(STARTTLS), smtp.naver.com:587(STARTTLS)과 465(TLS)가 모두 TLS 협상과 서버 이름 검증까지 통과했습니다. 암호는 보내지 않았고 로그인 시도도 하지 않았습니다. JVM 기본 신뢰 저장소 기준이므로 안드로이드 기기의 신뢰 저장소에서는 따로 확인되지 않았습니다.
+
 이 앱 자체의 실제 계정 검증은 한 번도 수행하지 않았습니다. 검증 절차는 `docs/verification-checklist.md`에 있습니다.
 
 ## iCloud 메일

@@ -84,13 +84,23 @@ class GreenMailGatewayTest {
     }
 
     @Test
-    fun envelopeSenderIsPreservedAsReturnPath() {
-        deliver("<m2@example.test>")
-        JakartaImapConnector.connect(imap, alice).use { session ->
-            session.open("INBOX", readOnly = true)
-            val raw = session.fetchContent("INBOX", session.listUids("INBOX", 1, null).single())
-            assertNotNull(raw)
-        }
+    fun envelopeSenderIsSeparateFromTheFromHeaderAndReachesReturnPath() {
+        val composed = outgoing("<m2@example.test>")
+        val withBounce = app.dustbird.mail.core.mime.ComposedMessage(composed.raw, composed.rawWithBcc, "bounce@example.test", composed.recipients)
+        assertIs<SmtpOutcome.Accepted>(JakartaSmtpSender.send(smtp, bob, withBounce))
+        val mailSession = javax.mail.Session.getInstance(java.util.Properties().apply {
+            put("mail.imap.ssl.enable", "true")
+            put("mail.imap.ssl.checkserveridentity", "true")
+        })
+        val store = mailSession.getStore("imap")
+        store.connect(server.host, server.imapPort, alice.username, alice.secret)
+        val inbox = store.getFolder("INBOX")
+        inbox.open(javax.mail.Folder.READ_ONLY)
+        val received = inbox.getMessage(1)
+        assertEquals(listOf("<bounce@example.test>"), received.getHeader("Return-Path").toList())
+        assertEquals("bob@example.test", (received.from.single() as javax.mail.internet.InternetAddress).address)
+        inbox.close(false)
+        store.close()
     }
 
     @Test
@@ -119,7 +129,6 @@ class GreenMailGatewayTest {
             val all = session.listUids("INBOX", 1, null)
             assertEquals(3, all.size)
             assertEquals(listOf(all[2]), session.listUids("INBOX", all[2], null))
-            assertTrue(session.listUids("INBOX", all[2] + 1, null).isEmpty().not() || true)
             assertContentEquals(all.drop(1), session.listUids("INBOX", all[1], all[2]))
             assertEquals("1:3", JakartaImapSession.uidSet(listOf(1, 2, 3)))
             assertEquals("1:2,5,7:8", JakartaImapSession.uidSet(listOf(8, 1, 2, 5, 7)))
@@ -174,7 +183,6 @@ class GreenMailGatewayTest {
     fun smtpCheckAuthenticatesWithoutSending() {
         assertEquals(CheckResult.Ok, ConnectionChecks.smtp(smtp, alice))
         val failed = ConnectionChecks.smtp(smtp, Credentials("alice@example.test", "wrong"))
-        assertNull((failed as? CheckResult.Failed)?.let { null })
         assertEquals(ConnectFailure.AUTH, assertIs<CheckResult.Failed>(failed).failure)
     }
 
