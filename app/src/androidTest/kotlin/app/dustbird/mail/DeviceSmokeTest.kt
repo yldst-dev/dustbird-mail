@@ -18,7 +18,7 @@ class DeviceSmokeTest {
 
     @Test
     fun launchShowsAppName() {
-        compose.onNodeWithText("AddAccountRoute").assertExists()
+        compose.onNodeWithText(compose.activity.getString(R.string.add_account_title_choose)).assertExists()
     }
 
     @Test

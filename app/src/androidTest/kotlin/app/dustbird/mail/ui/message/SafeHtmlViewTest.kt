@@ -71,7 +71,7 @@ class SafeHtmlViewTest {
     fun everyRequestIsBlockedWhileImagesAreNotAllowed() {
         show(HOSTILE_HTML, imagesAllowed = false)
         val web = compose.awaitWebView()
-        val client = web.webViewClient
+        val client = compose.runOnUiThread { web.webViewClient }
         listOf("https://tracker.example/pixel.gif", "http://tracker.example/pixel.gif", "data:image/png;base64,AAAA", "file:///etc/passwd", "ftp://example.com/x").forEach {
             assertEquals(403, client.shouldInterceptRequest(web, FakeRequest(it))?.statusCode, it)
         }
@@ -83,7 +83,7 @@ class SafeHtmlViewTest {
     fun onlyHttpsSubResourcesPassWhenImagesAreAllowed() {
         show(HOSTILE_HTML, imagesAllowed = true)
         val web = compose.awaitWebView()
-        val client = web.webViewClient
+        val client = compose.runOnUiThread { web.webViewClient }
         assertFalse(compose.runOnUiThread { web.settings.blockNetworkLoads })
         assertNull(client.shouldInterceptRequest(web, FakeRequest("https://cdn.example/a.png")))
         listOf("http://cdn.example/a.png", "data:image/png;base64,AAAA", "javascript:alert(1)", "ftp://cdn.example/a.png").forEach {
@@ -95,12 +95,13 @@ class SafeHtmlViewTest {
     fun theBundledFontIsServedOnlyFromTheInternalAddress() {
         show("<p>text</p>", imagesAllowed = false)
         val web = compose.awaitWebView()
-        val response = web.webViewClient.shouldInterceptRequest(web, FakeRequest(ResourcePolicy.FONT_URL))
+        val client = compose.runOnUiThread { web.webViewClient }
+        val response = client.shouldInterceptRequest(web, FakeRequest(ResourcePolicy.FONT_URL))
         assertNotNull(response)
         assertEquals(200, response.statusCode)
         assertEquals("font/ttf", response.mimeType)
         assertEquals("*", response.responseHeaders["Access-Control-Allow-Origin"])
         assertTrue(response.data.use { it.read() } >= 0)
-        assertEquals(403, web.webViewClient.shouldInterceptRequest(web, FakeRequest(ResourcePolicy.FONT_URL + "?x=1"))?.statusCode)
+        assertEquals(403, client.shouldInterceptRequest(web, FakeRequest(ResourcePolicy.FONT_URL + "?x=1"))?.statusCode)
     }
 }
