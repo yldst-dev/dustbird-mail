@@ -1,5 +1,6 @@
 package app.dustbird.mail.ui.message
 
+import android.annotation.SuppressLint
 import android.content.res.Resources
 import android.os.Handler
 import android.os.Looper
@@ -80,6 +81,7 @@ internal fun WebView.harden(imagesAllowed: Boolean, textZoom: Int) {
     }
 }
 
+@SuppressLint("ResourceType")
 @Composable
 fun SafeHtmlView(page: HtmlPage, imagesAllowed: Boolean, onLink: (LinkTarget) -> Unit, modifier: Modifier = Modifier) {
     val textZoom = (LocalConfiguration.current.fontScale * 100).roundToInt()

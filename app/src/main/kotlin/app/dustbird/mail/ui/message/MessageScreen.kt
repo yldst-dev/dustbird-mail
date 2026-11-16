@@ -2,7 +2,7 @@ package app.dustbird.mail.ui.message
 
 import android.content.ActivityNotFoundException
 import android.content.Intent
-import android.net.Uri
+import androidx.core.net.toUri
 import android.widget.Toast
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
@@ -109,7 +109,7 @@ private fun MessageContent(messageId: Long, onCompose: (ComposeArgs) -> Unit, mo
                 target = target,
                 onOpen = {
                     pendingLink = null
-                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse(target.url)).addCategory(Intent.CATEGORY_BROWSABLE)
+                    val intent = Intent(Intent.ACTION_VIEW, target.url.toUri()).addCategory(Intent.CATEGORY_BROWSABLE)
                     try {
                         context.startActivity(intent)
                     } catch (_: ActivityNotFoundException) {
