@@ -8,6 +8,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import app.dustbird.mail.AppContainer
 import app.dustbird.mail.core.identity.Rejection
+import app.dustbird.mail.core.model.FolderRole
 import app.dustbird.mail.core.model.StageState
 import app.dustbird.mail.core.model.TransportSecurity
 import app.dustbird.mail.core.net.CheckResult
@@ -15,6 +16,7 @@ import app.dustbird.mail.core.net.ConnectFailure
 import app.dustbird.mail.core.net.ImapConnector
 import app.dustbird.mail.core.net.SmtpSender
 import app.dustbird.mail.core.provider.Providers
+import app.dustbird.mail.data.db.FolderEntity
 import app.dustbird.mail.data.db.MailDatabase
 import app.dustbird.mail.data.secure.CredentialStore
 import app.dustbird.mail.sync.SyncOutcome
@@ -25,8 +27,9 @@ import app.dustbird.mail.ui.accounts.add.FormField
 import app.dustbird.mail.ui.accounts.add.FormRules
 import app.dustbird.mail.ui.accounts.add.FormValues
 import app.dustbird.mail.ui.accounts.add.SaveError
+import app.dustbird.mail.ui.accounts.add.RolePrompt
 import app.dustbird.mail.ui.accounts.add.Stage
-import app.dustbird.mail.ui.accounts.add.passed
+import app.dustbird.mail.ui.accounts.add.rolePrompts
 import java.net.ConnectException
 import java.util.concurrent.ConcurrentHashMap
 import kotlinx.coroutines.delay
@@ -51,6 +54,11 @@ private class MemoryCredentialStore : CredentialStore {
     override fun delete(accountId: Long) { secrets.remove(accountId) }
     override fun deleteAll() = secrets.clear()
 }
+
+private fun folder(path: String, attributes: String = "", role: FolderRole? = null, confirmed: Boolean = false) = FolderEntity(
+    accountId = 1, path = path, delimiter = "/", attributes = attributes, role = role, roleConfirmed = confirmed,
+    uidValidity = 1, highestUid = 0, baselineComplete = false, syncedAt = 0,
+)
 
 private fun onMain(block: () -> Unit) = InstrumentationRegistry.getInstrumentation().runOnMainSync(block)
 
@@ -90,7 +98,7 @@ class AddAccountViewModelTest {
 
     @After
     fun tearDown() {
-        runBlocking { container.settings.clearAll() }
+        runBlocking { db.accounts().getAll().forEach { container.accounts.removeAccount(it.id, force = true) } }
         db.close()
     }
 
@@ -121,7 +129,7 @@ class AddAccountViewModelTest {
 
     private fun AddAccountViewModel.verifyAndWait(): AddAccountUiState {
         onMain { verify() }
-        return await { it.step == AddStep.VERIFY && it.imap is Stage.Done && (!it.imap.passed || it.smtp is Stage.Done) }
+        return await { it.step == AddStep.VERIFY && it.imap is Stage.Done && it.smtp is Stage.Done }
     }
 
     @Test
@@ -218,7 +226,6 @@ class AddAccountViewModelTest {
 
         val synced = viewModel.await { it.sync != null }
         assertEquals(SyncOutcome.Failed(ConnectFailure.UNREACHABLE), synced.sync)
-        runBlocking { container.accounts.removeAccount(accountId, force = true) }
     }
 
     @Test
@@ -228,7 +235,7 @@ class AddAccountViewModelTest {
         first.fill()
         first.verifyAndWait()
         onMain { first.save() }
-        val firstId = assertNotNull(first.await { it.step == AddStep.SYNC }.accountId)
+        first.await { it.step == AddStep.SYNC }
         first.await { it.sync != null }
 
         val second = newViewModel()
@@ -241,11 +248,10 @@ class AddAccountViewModelTest {
         assertEquals(AddStep.VERIFY, rejected.step)
         assertEquals(1, runBlocking { db.accounts().getAll() }.size)
         assertEquals(secret, second.fields.password.text.toString())
-        runBlocking { container.accounts.removeAccount(firstId, force = true) }
     }
 
     @Test
-    fun failedLoginStopsBeforeSmtpAndCannotBeSaved() {
+    fun failedLoginIsReportedSeparatelyFromSmtpAndCannotBeSaved() {
         val viewModel = newViewModel(imap = CheckResult.Failed(ConnectFailure.OTHER, "rejected $secret by server"))
         viewModel.openForm()
         viewModel.fill()
@@ -253,7 +259,7 @@ class AddAccountViewModelTest {
         val failed = assertIs<CheckResult.Failed>(assertIs<Stage.Done>(state.imap).result)
         assertEquals(ConnectFailure.OTHER, failed.failure)
         assertFalse(secret in failed.detail)
-        assertEquals(Stage.Pending, state.smtp)
+        assertEquals(Stage.Done(CheckResult.Ok), state.smtp)
 
         onMain { viewModel.save() }
         assertEquals(AddStep.VERIFY, viewModel.state.value.step)
@@ -286,5 +292,39 @@ class AddAccountViewModelTest {
         assertEquals("", restored.fields.password.text.toString())
         assertEquals("", restored.fields.address.text.toString())
         assertTrue(handle.keys().none { handle.get<Any?>(it).toString().contains(secret) })
+    }
+
+    @Test
+    fun assignedFoldersAreNotAskedAbout() {
+        val folders = listOf(
+            folder("INBOX"),
+            folder("[Gmail]/Sent Mail", "\\Sent"),
+            folder("[Gmail]/Drafts", "\\Drafts"),
+            folder("[Gmail]/Spam", "\\Junk"),
+        )
+        assertEquals(emptyList(), rolePrompts(folders))
+    }
+
+    @Test
+    fun foldersMatchedOnlyByNameNeedConfirmation() {
+        val prompts = rolePrompts(listOf(folder("INBOX"), folder("Sent Messages"), folder("Drafts"), folder("Spam")))
+        assertEquals(
+            listOf(
+                RolePrompt(FolderRole.SENT, listOf("Sent Messages"), missing = false),
+                RolePrompt(FolderRole.DRAFTS, listOf("Drafts"), missing = false),
+                RolePrompt(FolderRole.SPAM, listOf("Spam"), missing = false),
+            ),
+            prompts,
+        )
+    }
+
+    @Test
+    fun missingRoleOffersOnlyFoldersThatAreNotAssigned() {
+        val prompts = rolePrompts(
+            listOf(folder("INBOX"), folder("Outgoing", "\\Sent"), folder("Work"), folder("Trash", "\\Trash"), folder("Confirmed", role = FolderRole.SPAM, confirmed = true)),
+        )
+        assertEquals(listOf(FolderRole.DRAFTS), prompts.map { it.role })
+        assertEquals(listOf("Work"), prompts.single().options)
+        assertTrue(prompts.single().missing)
     }
 }
