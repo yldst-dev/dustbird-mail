@@ -13,6 +13,7 @@ object Addresses {
     fun same(a: String, b: String): Boolean = normalize(a) == normalize(b)
 
     fun isValid(address: String): Boolean {
+        if (!isSafeHeaderValue(address)) return false
         val value = address.trim()
         if (value.length > 254 || value.count { it == '@' } != 1) return false
         val (localPart, domain) = value.split('@')
@@ -28,6 +29,10 @@ object Addresses {
         return value
     }
 
+    private fun looksLikeAddress(value: String): Boolean =
+        value.count { it == '@' } == 1 && !value.startsWith('@') && !value.endsWith('@') &&
+            value.none { it.isWhitespace() || it.isISOControl() || it == '<' || it == '>' }
+
     fun parseList(header: String?): List<EmailAddress> {
         if (header.isNullOrBlank()) return emptyList()
         val parsed = try {
@@ -37,7 +42,7 @@ object Addresses {
         }
         return parsed.mapNotNull { entry ->
             val address = entry.address?.trim().orEmpty()
-            if (address.isEmpty()) null else EmailAddress(address, entry.personal?.takeIf { it.isNotBlank() })
+            if (!looksLikeAddress(address)) null else EmailAddress(address, entry.personal?.takeIf { it.isNotBlank() })
         }
     }
 }
