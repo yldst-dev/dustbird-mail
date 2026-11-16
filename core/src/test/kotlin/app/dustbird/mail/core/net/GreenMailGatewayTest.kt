@@ -177,4 +177,20 @@ class GreenMailGatewayTest {
         assertNull((failed as? CheckResult.Failed)?.let { null })
         assertEquals(ConnectFailure.AUTH, assertIs<CheckResult.Failed>(failed).failure)
     }
+
+    @Test
+    fun draftCopiesAreFlaggedAndOldVersionsAreRemovedByMessageId() {
+        val composed = outgoing("<draft-1@example.test>", subject = "초안")
+        JakartaImapConnector.connect(imap, alice).use { session ->
+            session.open("INBOX")
+            session.append("INBOX", composed.rawWithBcc, seen = true, draft = true)
+            val found = session.findByMessageId("INBOX", "<draft-1@example.test>")
+            assertEquals(1, found.size)
+            assertTrue(session.fetchFlags("INBOX", found).getValue(found.single()).draft)
+            assertEquals(1, session.removeByMessageId("INBOX", "<draft-1@example.test>"))
+            val after = session.findByMessageId("INBOX", "<draft-1@example.test>")
+            assertTrue(after.isEmpty() || session.fetchFlags("INBOX", after).getValue(after.single()).deleted)
+            assertEquals(0, session.removeByMessageId("INBOX", "<never@example.test>"))
+        }
+    }
 }

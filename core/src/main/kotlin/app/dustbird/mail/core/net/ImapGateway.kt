@@ -36,8 +36,9 @@ interface ImapSession : AutoCloseable {
     fun fetchFlags(path: String, uids: List<Long>): Map<Long, MessageFlags>
     fun fetchContent(path: String, uid: Long): ParsedContent?
     fun setSeen(path: String, uid: Long, seen: Boolean)
-    fun append(path: String, raw: ByteArray, seen: Boolean): Long?
+    fun append(path: String, raw: ByteArray, seen: Boolean, draft: Boolean = false): Long?
     fun findByMessageId(path: String, messageId: String): List<Long>
+    fun removeByMessageId(path: String, messageId: String): Int
     fun idle(path: String, onChange: () -> Unit)
 }
 

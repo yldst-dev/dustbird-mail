@@ -14,6 +14,7 @@ data class OriginalMessage(
     val subject: String,
     val text: String,
     val matchedIdentityIds: List<Long>,
+    val sentByMe: Boolean = false,
 )
 
 data class DraftSeed(
@@ -40,13 +41,12 @@ object ReplyComposer {
     ): DraftSeed {
         val own = allIdentities.map { Addresses.normalize(it.address) }.toSet()
         val primary = original.replyTo.ifEmpty { listOfNotNull(original.from) }
-        val primaryIsOwn = primary.isNotEmpty() && primary.all { Addresses.normalize(it.address) in own }
         val (to, cc) = if (replyAll) {
-            val toCandidates = if (primaryIsOwn) original.to else primary + original.to
-            dedupe(toCandidates, own) to dedupe(original.cc, own, alreadyUsed = toCandidates)
+            val toCandidates = if (original.sentByMe) original.to else primary + original.to
+            val to = dedupe(toCandidates, own).ifEmpty { dedupe(toCandidates, emptySet()) }
+            to to dedupe(original.cc, own, alreadyUsed = toCandidates)
         } else {
-            val target = if (primaryIsOwn) original.to else primary
-            dedupe(target, own) to emptyList()
+            dedupe(if (original.sentByMe) original.to else primary, emptySet()) to emptyList()
         }
         val (identity, needsConfirmation) = chooseIdentity(original, allIdentities)
         val id = original.messageId

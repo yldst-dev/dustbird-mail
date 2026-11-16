@@ -51,7 +51,8 @@ class RecipientAndReplyTest {
         matched: List<Long> = listOf(2),
         subject: String = "안녕",
         references: List<String> = listOf("<r1@x>"),
-    ) = OriginalMessage(10, "<orig@x>", references, from, replyTo, to, cc, subject, "line1\n\nline3", matched)
+        sentByMe: Boolean = false,
+    ) = OriginalMessage(10, "<orig@x>", references, from, replyTo, to, cc, subject, "line1\n\nline3", matched, sentByMe)
 
     @Test
     fun replyGoesToSenderFromTheMatchedIdentityWithThreadHeaders() {
@@ -104,14 +105,32 @@ class RecipientAndReplyTest {
     }
 
     @Test
-    fun replyingToOwnMessageTargetsTheOriginalRecipients() {
+    fun replyingToAMessageFromTheSentFolderTargetsTheOriginalRecipients() {
         val seed = ReplyComposer.reply(
-            original(from = addr("me@example.com"), to = listOf(addr("friend@example.net"), addr("biz@example.com"))),
+            original(from = addr("me@example.com"), to = listOf(addr("friend@example.net"), addr("biz@example.com")), sentByMe = true),
             all,
             replyAll = false,
             attribution = "a",
         )
-        assertEquals(listOf("friend@example.net"), seed.to.map { it.address })
+        assertEquals(listOf("friend@example.net", "biz@example.com"), seed.to.map { it.address })
+    }
+
+    @Test
+    fun replyToAMessageFromYourOwnOtherAddressKeepsThatSender() {
+        val seed = ReplyComposer.reply(original(from = addr("OTHER@example.org")), all, replyAll = false, attribution = "a")
+        assertEquals(listOf("OTHER@example.org"), seed.to.map { it.address })
+    }
+
+    @Test
+    fun replyAllNeverLeavesTheToListEmpty() {
+        val seed = ReplyComposer.reply(
+            original(from = addr("other@example.org"), to = listOf(addr("biz@example.com")), cc = listOf(addr("me@example.com"))),
+            all,
+            replyAll = true,
+            attribution = "a",
+        )
+        assertEquals(listOf("other@example.org", "biz@example.com"), seed.to.map { it.address })
+        assertTrue(seed.cc.isEmpty())
     }
 
     @Test

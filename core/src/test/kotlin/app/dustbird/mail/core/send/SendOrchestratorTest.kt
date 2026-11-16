@@ -41,7 +41,7 @@ private class FakeImap : ImapConnector {
             override fun fetchFlags(path: String, uids: List<Long>): Map<Long, MessageFlags> = emptyMap()
             override fun fetchContent(path: String, uid: Long): ParsedContent? = null
             override fun setSeen(path: String, uid: Long, seen: Boolean) = Unit
-            override fun append(path: String, raw: ByteArray, seen: Boolean): Long? {
+            override fun append(path: String, raw: ByteArray, seen: Boolean, draft: Boolean): Long? {
                 if (failAppend) error("append failed")
                 appended += raw
                 sentIds += "<appended>"
@@ -52,6 +52,7 @@ private class FakeImap : ImapConnector {
                 if (appearAfterChecks in 1..lookups) sentIds += messageId
                 return if (messageId in sentIds || "<appended>" in sentIds && appended.isNotEmpty()) listOf(1) else emptyList()
             }
+            override fun removeByMessageId(path: String, messageId: String): Int = 0
             override fun idle(path: String, onChange: () -> Unit) = Unit
             override fun close() = Unit
         }
@@ -190,5 +191,15 @@ class SendOrchestratorTest {
         val report = orchestrator(ScriptedSmtp(mutableListOf(SmtpOutcome.Unknown("dropped"))), imap).send(item(), route())
         assertEquals(SendState.SAVED, report.record.state)
         assertEquals(listOf(SendState.SENDING, SendState.UNKNOWN, SendState.SAVED), saved)
+    }
+
+    @Test
+    fun confirmingAnUnknownSendSavesTheCopyWithoutSendingAgain() {
+        val imap = FakeImap()
+        val smtp = ScriptedSmtp(mutableListOf())
+        val record = orchestrator(smtp, imap).saveAfterConfirmation(item(SendRecord(SendState.UNKNOWN, 1)), route())
+        assertEquals(SendState.SAVED, record.state)
+        assertEquals(1, imap.appended.size)
+        assertEquals(0, smtp.calls)
     }
 }

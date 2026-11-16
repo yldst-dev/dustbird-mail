@@ -145,10 +145,11 @@ class JakartaImapSession(private val store: IMAPStore) : ImapSession {
         folder.getMessageByUID(uid)?.setFlag(Flags.Flag.SEEN, seen)
     }
 
-    override fun append(path: String, raw: ByteArray, seen: Boolean): Long? {
+    override fun append(path: String, raw: ByteArray, seen: Boolean, draft: Boolean): Long? {
         val folder = folders.getOrPut(path) { store.getFolder(path) as IMAPFolder }
         val message: MimeMessage = MessageParser.parseRaw(raw)
         if (seen) message.setFlag(Flags.Flag.SEEN, true)
+        if (draft) message.setFlag(Flags.Flag.DRAFT, true)
         val appended = folder.appendUIDMessages(arrayOf(message))
         return appended.firstOrNull()?.uid
     }
@@ -156,6 +157,15 @@ class JakartaImapSession(private val store: IMAPStore) : ImapSession {
     override fun findByMessageId(path: String, messageId: String): List<Long> {
         val folder = ensureOpen(path)
         return folder.search(HeaderTerm("Message-ID", messageId)).map { folder.getUID(it) }
+    }
+
+    override fun removeByMessageId(path: String, messageId: String): Int {
+        val folder = ensureOpen(path)
+        val matches = folder.search(HeaderTerm("Message-ID", messageId))
+        if (matches.isEmpty()) return 0
+        folder.setFlags(matches, Flags(Flags.Flag.DELETED), true)
+        if (store.hasCapability("UIDPLUS")) folder.expunge(matches)
+        return matches.size
     }
 
     override fun idle(path: String, onChange: () -> Unit) {

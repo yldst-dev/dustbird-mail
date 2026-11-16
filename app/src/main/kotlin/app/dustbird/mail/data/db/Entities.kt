@@ -7,6 +7,7 @@ import androidx.room.PrimaryKey
 import app.dustbird.mail.core.model.AuthMethod
 import app.dustbird.mail.core.model.FolderRole
 import app.dustbird.mail.core.model.SendVerification
+import app.dustbird.mail.core.model.StageState
 import app.dustbird.mail.core.model.SyncMode
 import app.dustbird.mail.core.model.TransportSecurity
 import app.dustbird.mail.core.send.SendState
@@ -30,6 +31,11 @@ data class AccountEntity(
     val notificationsEnabled: Boolean,
     val needsReauth: Boolean,
     val mailboxKey: String,
+    val stageImapAuth: StageState = StageState.UNKNOWN,
+    val stageSmtpAuth: StageState = StageState.UNKNOWN,
+    val stageSend: StageState = StageState.UNKNOWN,
+    val stageReceive: StageState = StageState.UNKNOWN,
+    val stageSentCopy: StageState = StageState.UNKNOWN,
 )
 
 @Entity(
@@ -60,6 +66,8 @@ data class FolderEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val accountId: Long,
     val path: String,
+    val delimiter: String?,
+    val attributes: String,
     val role: FolderRole?,
     val roleConfirmed: Boolean,
     val uidValidity: Long,

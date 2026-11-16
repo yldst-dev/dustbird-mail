@@ -192,6 +192,9 @@ interface DraftDao {
 
     @Query("SELECT COUNT(*) FROM draft WHERE accountId = :accountId")
     suspend fun countForAccount(accountId: Long): Int
+
+    @Query("SELECT COUNT(*) FROM draft WHERE identityId = :identityId")
+    suspend fun countForIdentity(identityId: Long): Int
 }
 
 @Dao
@@ -243,4 +246,45 @@ interface NotifiedDao {
 
     @Query("DELETE FROM notified WHERE notifiedAt < :before")
     suspend fun prune(before: Long)
+}
+
+data class FlagRow(val uid: Long, val seen: Boolean, val answered: Boolean, val flagged: Boolean)
+
+@Dao
+interface SyncDao {
+    @Query("SELECT * FROM folder WHERE id = :id")
+    fun folder(id: Long): FolderEntity
+
+    @Update
+    fun updateFolder(entity: FolderEntity)
+
+    @Query("DELETE FROM message WHERE folderId = :folderId")
+    fun deleteMessages(folderId: Long)
+
+    @Query("DELETE FROM pending_flag WHERE folderId = :folderId")
+    fun deletePending(folderId: Long)
+
+    @Query("SELECT uid, seen, answered, flagged FROM message WHERE folderId = :folderId ORDER BY uid DESC LIMIT :limit")
+    fun cachedFlags(folderId: Long, limit: Int): List<FlagRow>
+
+    @Query("SELECT COALESCE(MIN(uid), 0) FROM message WHERE folderId = :folderId")
+    fun oldestUid(folderId: Long): Long
+
+    @Query("SELECT * FROM pending_flag WHERE folderId = :folderId ORDER BY id")
+    fun pending(folderId: Long): List<PendingFlagEntity>
+
+    @Query("DELETE FROM pending_flag WHERE folderId = :folderId AND uid = :uid")
+    fun clearPending(folderId: Long, uid: Long)
+
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    fun insertMessages(entities: List<MessageEntity>)
+
+    @Query("UPDATE message SET seen = :seen, answered = :answered, flagged = :flagged WHERE folderId = :folderId AND uid = :uid")
+    fun setFlags(folderId: Long, uid: Long, seen: Boolean, answered: Boolean, flagged: Boolean)
+
+    @Query("DELETE FROM message WHERE folderId = :folderId AND uid IN (:uids)")
+    fun deleteUids(folderId: Long, uids: List<Long>)
+
+    @Query("UPDATE outbox SET state = :state, attempts = :attempts, failure = :failure, updatedAt = :now WHERE id = :id")
+    fun setOutboxState(id: Long, state: app.dustbird.mail.core.send.SendState, attempts: Int, failure: String?, now: Long)
 }

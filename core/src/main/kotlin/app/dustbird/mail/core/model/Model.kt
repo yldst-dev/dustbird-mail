@@ -14,6 +14,16 @@ enum class SendVerification { UNVERIFIED, VERIFIED, FAILED }
 
 enum class SyncMode { MANUAL, PERIODIC, IDLE }
 
+enum class StageState { UNKNOWN, OK, FAILED }
+
+data class ConnectionStages(
+    val imapAuth: StageState = StageState.UNKNOWN,
+    val smtpAuth: StageState = StageState.UNKNOWN,
+    val send: StageState = StageState.UNKNOWN,
+    val receive: StageState = StageState.UNKNOWN,
+    val sentCopy: StageState = StageState.UNKNOWN,
+)
+
 data class EmailAddress(val address: String, val name: String? = null)
 
 data class MailAccount(
@@ -28,6 +38,8 @@ data class MailAccount(
     val sortOrder: Int,
     val syncMode: SyncMode,
     val notificationsEnabled: Boolean,
+    val needsReauth: Boolean = false,
+    val stages: ConnectionStages = ConnectionStages(),
 )
 
 data class MailIdentity(

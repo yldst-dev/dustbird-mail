@@ -65,6 +65,11 @@ class SendOrchestrator(
         return storeSentCopy(item, ready, route, forceAppend = true)
     }
 
+    fun saveAfterConfirmation(item: OutboxItem, route: SendRoute): SendRecord {
+        val confirmed = advance(item.id, item.record, SendEvent.UserConfirmSent)
+        return storeSentCopy(item, confirmed, route, forceAppend = true)
+    }
+
     private fun lookForCopy(item: OutboxItem, record: SendRecord, route: SendRoute): SendRecord {
         val path = route.sentFolderPath ?: return record
         val found = try {

@@ -74,6 +74,9 @@ object MessageParser {
         return ParsedContent(text.toString().ifBlank { null }, html.toString().ifBlank { null }, attachments)
     }
 
+    fun plainText(content: ParsedContent): String =
+        content.text ?: content.html?.let { Jsoup.parse(it).wholeText().trim() } ?: ""
+
     fun preview(content: ParsedContent, limit: Int = 200): String {
         val source = content.text ?: content.html?.let { Jsoup.parse(it).text() } ?: return ""
         return source.lineSequence()

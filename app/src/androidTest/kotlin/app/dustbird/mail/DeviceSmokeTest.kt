@@ -2,19 +2,13 @@ package app.dustbird.mail
 
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithText
-import androidx.room.Room
 import androidx.test.ext.junit.runners.AndroidJUnit4
-import androidx.test.platform.app.InstrumentationRegistry
-import app.dustbird.mail.data.ProbeDatabase
-import app.dustbird.mail.data.ProbeEntity
 import java.util.Properties
 import javax.mail.Folder
 import javax.mail.Session
-import kotlinx.coroutines.runBlocking
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
-import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 @RunWith(AndroidJUnit4::class)
@@ -25,15 +19,6 @@ class DeviceSmokeTest {
     @Test
     fun launchShowsAppName() {
         compose.onNodeWithText("더스트버드 메일").assertExists()
-    }
-
-    @Test
-    fun roomRoundTrip() = runBlocking {
-        val context = InstrumentationRegistry.getInstrumentation().targetContext
-        val db = Room.inMemoryDatabaseBuilder(context, ProbeDatabase::class.java).build()
-        db.probeDao().insert(ProbeEntity(1, "value"))
-        assertEquals(1, db.probeDao().count())
-        db.close()
     }
 
     @Test

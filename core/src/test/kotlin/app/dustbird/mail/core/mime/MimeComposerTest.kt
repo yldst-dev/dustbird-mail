@@ -102,4 +102,11 @@ class MimeComposerTest {
         assertTrue(head.contains("charset=UTF-8", ignoreCase = true))
         assertTrue(head.contains("MIME-Version: 1.0"))
     }
+
+    @Test
+    fun draftsMayBeIncompleteButStillRejectHeaderInjection() {
+        val draft = MimeComposer.composeDraft(message(to = listOf(EmailAddress("typing-not-finished")), cc = emptyList(), bcc = emptyList(), subject = ""))
+        assertTrue(draft.recipients.isEmpty())
+        assertFailsWith<IllegalArgumentException> { MimeComposer.composeDraft(message(subject = "a\r\nBcc: x@y.com")) }
+    }
 }

@@ -35,9 +35,20 @@ object MimeComposer {
     private val session: Session = Session.getInstance(Properties().apply { put("mail.mime.allowutf8", "false") })
     private val messageIdShape = Regex("^<[^<>\\s@]+@[^<>\\s@]+>$")
 
-    fun compose(message: OutgoingMessage): ComposedMessage {
+    fun compose(message: OutgoingMessage): ComposedMessage = build(message, strict = true)
+
+    fun composeDraft(message: OutgoingMessage): ComposedMessage = build(
+        message.copy(
+            to = message.to.filter { Addresses.isValid(it.address) },
+            cc = message.cc.filter { Addresses.isValid(it.address) },
+            bcc = message.bcc.filter { Addresses.isValid(it.address) },
+        ),
+        strict = false,
+    )
+
+    private fun build(message: OutgoingMessage, strict: Boolean): ComposedMessage {
         val everyone = message.to + message.cc + message.bcc
-        require(everyone.isNotEmpty()) { "At least one recipient is required" }
+        if (strict) require(everyone.isNotEmpty()) { "At least one recipient is required" }
         (everyone + message.from).forEach {
             require(Addresses.isValid(it.address)) { "Invalid address" }
             it.name?.let(Addresses::requireSafeHeaderValue)
