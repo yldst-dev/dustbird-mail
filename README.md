@@ -1,146 +1,76 @@
-# 더스트버드 메일
+<p align="center">
+  <img src="docs/images/logo.png" width="128" alt="Dustbird 로고">
+</p>
 
-갤럭시 휴대폰에서 쓰는 개인용 다계정 메일 클라이언트입니다. Kotlin, Jetpack Compose, Material 3 Expressive, Material You(동적 색상)를 쓰고 서체는 Pretendard입니다. 모든 계정은 IMAP과 SMTP로 직접 연결하며 별도 서버를 거치지 않습니다. 스토어 배포는 범위 밖이고 사용자 본인 기기에 직접 설치합니다.
+<h1 align="center">Dustbird Mail</h1>
 
-지원 서비스는 iCloud 메일, Gmail, 네이버 메일, 직접 설정하는 IMAP과 SMTP 계정입니다. 같은 서비스의 계정을 여러 개 추가할 수 있고, 한 사서함에 연결된 발신 주소(Identity)를 여러 개 등록할 수 있습니다. 계정 수와 발신 주소 수는 코드나 스키마에 고정되어 있지 않습니다.
+<p align="center">
+  갤럭시에서 쓰는 개인용 다계정 메일 앱입니다.<br>
+  IMAP과 SMTP로 메일 서버에 바로 연결하고, 원하면 메일을 대신 정리해 주는 에이전트를 켤 수 있습니다.
+</p>
 
-중요: 이 앱의 실제 계정 검증(iCloud, Gmail, 네이버)은 개발 중에 수행하지 않았습니다. 개발 중에는 테스트 서버만 썼고 외부로 메일을 보내지 않았습니다. 검증 절차는 [docs/verification-checklist.md](docs/verification-checklist.md)에 있습니다.
+<p align="center">
+  <b>한국어</b> · <a href="README.en.md">English</a>
+</p>
 
-## 검증 현황
+<p align="center">
+  <img src="docs/screenshots/mailbox.png" width="24%" alt="통합 받은편지함">
+  <img src="docs/screenshots/message-html.png" width="24%" alt="HTML 메일 읽기">
+  <img src="docs/screenshots/compose-reply.png" width="24%" alt="답장 쓰기">
+  <img src="docs/screenshots/selection.png" width="24%" alt="여러 통 선택">
+</p>
+<p align="center">
+  <img src="docs/screenshots/agent-chat.png" width="24%" alt="에이전트 대화">
+  <img src="docs/screenshots/agent-approval.png" width="24%" alt="보내기 승인">
+  <img src="docs/screenshots/search.png" width="24%" alt="검색">
+  <img src="docs/screenshots/settings.png" width="24%" alt="설정">
+</p>
+<p align="center"><sub>모든 화면은 테스트 서버의 예시 데이터로 찍었습니다.</sub></p>
 
-2026년 11월 16일 기준, 실제로 실행한 결과입니다.
+## 할 수 있는 것
 
-| 항목 | 결과 |
-| --- | --- |
-| `./gradlew :app:assembleDebug` | 성공. 디버그 APK 약 45MB |
-| `./gradlew :core:test` | 131개 통과 |
-| `./gradlew :app:testDebugUnitTest` | 24개 통과 |
-| `./gradlew :app:lintDebug` | 오류 0건, 경고 1건(targetSdk 36을 의도적으로 유지) |
-| `./gradlew :app:connectedDebugAndroidTest` | 104개 중 103개 통과, 실패 0건, 1건은 스크린샷용 시드 테스트라 건너뜀. 에뮬레이터(Android 36, arm64, 구글 API) |
-| 실제 서비스 검증(iCloud, Gmail, 네이버) | 수행하지 않음. 서비스별로 따로 적습니다: iCloud 미수행, Gmail 미수행, 네이버 미수행 |
-| 로그인 없이 실제 서버 8곳에 접속(TLS와 서버 이름 검증) | 통과(JVM 기본 신뢰 저장소 기준, `docs/providers.md`) |
-| 릴리스 빌드(서명, 코드 축소) | 만들지 않았고 디버그 빌드만 만들어 실행했습니다 |
-| 갤럭시 실기기, 폴더블 펼친 화면, 글자 크기 200%, TalkBack, 가로 회전, 입력기 동작 | 확인하지 못함 |
+- **계정**: iCloud 메일, Gmail, 네이버 메일, 직접 설정하는 IMAP과 SMTP. 계정과 발신 주소를 개수 제한 없이 추가합니다.
+- **받기**: 통합 받은편지함, 수동과 주기(약 15분)와 실시간(IMAP IDLE) 수신, 계정별 알림
+- **읽기와 정리**: HTML 메일 정제와 외부 이미지 차단, 밀어서 보관과 삭제, 여러 통 선택, 실행 취소
+- **쓰기**: 답장과 전달, 첨부, 받는 사람 추천, 보내기 취소, 예약 전송, 임시 저장
+- **에이전트**: 메일 찾기, 요약, 답장 초안, 정리. 기본으로 꺼져 있고, 메일을 보낼 때는 매번 사용자가 승인해야 합니다.
+- **보안**: 계정마다 Android Keystore 키로 암호화한 자격 증명, TLS 연결만 허용, 분석과 광고 SDK 없음
 
-기기 테스트에는 테스트 서버를 실제 IMAP과 SMTP 코드로 거쳐서 보내기, 받기, 답장 연결, 읽음 동기화, 한 계정 인증 실패 격리, 초안 이동, 실시간 수신(IDLE) 알림, 알림 내용과 잠금 화면 처리, 자격 증명 보관과 삭제가 들어 있습니다. 테스트 서버 결과는 실제 서비스 검증이 아닙니다.
+> [!NOTE]
+> 실제 iCloud, Gmail, 네이버 계정으로는 아직 검증하지 않았습니다. 개발과 테스트는 테스트 메일 서버로만 했습니다. 스토어에는 올리지 않고 기기에 직접 설치해서 씁니다.
 
-## 주요 화면
+## 빌드와 설치
 
-모든 스크린샷은 테스트 서버의 예시 데이터이며 실제 주소나 메일이 아닙니다. 에뮬레이터 기본 동적 색상입니다.
+필요한 것은 JDK 21 이상, Android SDK 플랫폼 37, Android 12(API 31) 이상의 기기입니다.
 
-| 계정 추가 준비 | 통합 받은편지함 | HTML 메일 |
-| --- | --- | --- |
-| ![계정 추가 준비](docs/screenshots/add-account-prepare.png) | ![통합 받은편지함](docs/screenshots/mailbox.png) | ![HTML 메일](docs/screenshots/message-html.png) |
-
-| 답장 작성 | 보낼 편지함 | 계정 목록 |
-| --- | --- | --- |
-| ![답장 작성](docs/screenshots/compose-reply.png) | ![보낼 편지함](docs/screenshots/outbox.png) | ![계정 목록](docs/screenshots/accounts.png) |
-
-| 계정 상세 | 설정 |
-| --- | --- |
-| ![계정 상세](docs/screenshots/account-detail.png) | ![설정](docs/screenshots/settings.png) |
-
-## 구성
-
-| 위치 | 내용 |
-| --- | --- |
-| `core/` | JVM 전용. 서비스 프로필, 계정과 발신 주소 규칙, 수신 주소 판별, 답장 규칙, MIME, 폴더 역할, 발송 상태 기계, 폴더 동기화, HTML 정제, IMAP과 SMTP 게이트웨이 |
-| `app/` | Android. Room, 자격 증명 보관, 리포지토리, 동기화와 발송 서비스, 알림, 백그라운드 작업, 화면 |
-| `testfixtures/` | 테스트 전용 TLS 인증서(보호할 비밀이 없는 일회용 키) |
-| `third_party/` | 서체와 의존성 라이선스 원문 |
-| `docs/` | 기술 결정 기록, 서비스별 확인 현황, 실제 서비스 검증 점검표 |
-
-- 기술 결정과 근거: [docs/decisions.md](docs/decisions.md)
-- 서비스 프로필별 확인된 동작과 미확인 동작: [docs/providers.md](docs/providers.md)
-- 서비스별 실제 계정 검증 점검표: [docs/verification-checklist.md](docs/verification-checklist.md)
-
-## 요구 사항
-
-- JDK 21 이상(개발은 21로 했습니다)
-- Android SDK: 플랫폼 37(compileSdk), 빌드 도구, 에뮬레이터를 쓰려면 Android 36 시스템 이미지
-- Gradle은 래퍼(9.7.0)를 씁니다. 인터넷 연결이 필요합니다(Maven Central, Google Maven).
-- 대상 기기: Android 12(API 31) 이상의 갤럭시. targetSdk는 36입니다.
-
-## 설정과 빌드
-
-저장소 루트에 `local.properties`를 만들어 SDK 위치를 적습니다(저장소에는 올라가지 않습니다).
-
-```
-sdk.dir=/path/to/Android/sdk
-```
-
-디버그 APK 만들기
-
-```
+```sh
+echo "sdk.dir=/path/to/Android/sdk" > local.properties
 ./gradlew :app:assembleDebug
+adb install -r app/build/outputs/apk/debug/app-debug.apk
 ```
 
-결과물은 `app/build/outputs/apk/debug/app-debug.apk`이며 서명 키는 필요하지 않습니다(디버그 키 사용). 기기에 `adb install -r app/build/outputs/apk/debug/app-debug.apk`로 설치합니다. 릴리스 서명 키와 로컬 설정 파일은 저장소에 포함하지 않습니다.
+테스트와 정적 점검은 아래 명령으로 돌립니다. 기기 테스트는 앱 데이터를 지우므로 에뮬레이터에서만 실행하세요. 자세한 방법은 [자세한 설명](docs/details.md#테스트와-실행-명령)에 있습니다.
 
-## 테스트와 실행 명령
+```sh
+./gradlew :core:test
+./gradlew :app:lintDebug
+```
 
-| 목적 | 명령 |
+## 사용한 기술
+
+Kotlin, Jetpack Compose, Material 3 Expressive, Room, WorkManager, DataStore, Jakarta Mail, jsoup, Pretendard
+
+## 문서
+
+| 문서 | 내용 |
 | --- | --- |
-| 코어 단위 테스트와 통합 테스트(GreenMail, 스크립트 SMTP 서버) | `./gradlew :core:test` |
-| 정적 점검 | `./gradlew :app:lintDebug` |
-| 기기 테스트용 서버 실행(다른 터미널에서 계속 켜 둠) | `./gradlew :core:runTestServer` |
-| 에뮬레이터 또는 기기 테스트 | `./gradlew :app:connectedDebugAndroidTest` |
+| [자세한 설명](docs/details.md) | 검증 현황, 기능 전체, 받아오는 방식, 보안, 알려진 제약 |
+| [에이전트 설계](docs/agent.md) | 연결 방식, 도구, 승인 규칙, 확인 범위 |
+| [기술 결정](docs/decisions.md) | 라이브러리와 구조를 고른 이유 |
+| [화면 규칙](docs/ui-brief.md) | 그림자 없는 알약 모양 디자인 |
+| [서비스별 확인 현황](docs/providers.md) | 서비스마다 확인한 동작과 확인하지 못한 동작 |
+| [실제 계정 검증 점검표](docs/verification-checklist.md) | 실제 계정으로 확인할 항목 |
 
-주의: 기기 테스트는 앱의 실제 데이터(계정, 메일 캐시, 설정)를 지우고, 일부 테스트는 실제 기기 보안 저장소에 계정 번호 1, 2 같은 이름의 키와 파일을 만듭니다. 실사용 중인 기기에서는 실행하지 말고 에뮬레이터나 시험용 기기에서만 실행하세요.
+## 라이선스
 
-기기 테스트 중 종단 테스트(`EngineEndToEndTest`)는 호스트의 테스트 서버(에뮬레이터에서 `10.0.2.2:3993`과 `3465`)가 켜져 있어야 하며, 없으면 건너뜁니다. 디버그 빌드는 `10.0.2.2` 한 곳에 대해서만 테스트용 인증서를 신뢰하고 릴리스 빌드에는 그 설정이 없습니다. 테스트 서버 검증 결과는 실제 서비스 검증이 아닙니다.
-
-## 받아오는 방식과 실제 지연
-
-계정마다 세 가지 중에서 고릅니다. 지연 범위는 설정 화면에도 같은 내용으로 적혀 있습니다.
-
-- 수동: 새로고침할 때만 받아옵니다.
-- 주기: WorkManager로 약 15분마다. 안드로이드와 삼성의 절전이 더 늦출 수 있어서 즉시 수신이나 분 단위 정확도는 약속하지 않습니다.
-- 실시간: IMAP IDLE 연결을 포그라운드 서비스로 유지해 거의 즉시 받습니다. 상시 알림이 보이고, 켠 계정이 늘수록 배터리와 서버 연결이 늘어납니다. 서버가 IDLE을 광고하지 않으면 5분 간격 확인으로 대신합니다. 기기를 다시 켜거나 강제 종료한 뒤에는 앱을 한 번 열어야 다시 시작됩니다.
-
-배터리 최적화 예외는 앱이 임의로 요청하지 않습니다. 설정 화면에서 이유를 설명하고 사용자가 시스템 화면에서 직접 선택합니다.
-
-## 발신 주소 검증과 원문 헤더 확인
-
-앱에 주소를 추가하는 것과 서버가 그 주소의 발송을 허용하는 것은 별개입니다. 발신 주소마다 상태(미검증, 검증됨, 실패)가 있고, 계정 상세 화면의 "시험 발송"(사용자가 확인 창에서 승인해야만 보냅니다)이나 실제 발송으로 확인됩니다.
-
-서버가 From이나 envelope sender를 바꿔 쓸 수 있으므로 수동 확인이 필요합니다.
-
-1. 해당 발신 주소로 자기 자신(다른 서비스의 주소가 더 좋습니다)에게 시험 발송합니다.
-2. 받은 메일의 원문(헤더 보기)을 엽니다.
-3. `From:`이 선택한 발신 주소와 같은지 확인합니다.
-4. `Return-Path:`와 가능하면 `Received:`의 envelope 주소를 확인해 서버가 어느 주소로 바꿔 보냈는지 기록합니다.
-5. 로그인 이름은 발신 주소를 바꿔도 바뀌지 않습니다.
-
-## 보안 요약
-
-- 암호는 사용자가 앱 안에서 입력합니다. 소스, 리소스, 빌드 설정, 테스트 데이터, 문서에 실제 주소와 암호가 없습니다.
-- 계정마다 별도 Keystore AES-256-GCM 키로 암호화해서 `noBackupFilesDir`에 저장하고, 클라우드 백업과 기기 간 전송에서 제외합니다.
-- 모든 연결은 TLS 또는 STARTTLS이며 암호화 없는 선택지는 없습니다. 서버 이름 검증은 명시적으로 켜져 있고, STARTTLS를 제공하지 않는 서버는 거부하며, 인증서 검증을 우회하는 설정은 제품 코드에 없습니다.
-- 로그, 분석, 원격 보고에 암호, 토큰, 메일 본문, 주소를 남기지 않습니다. 분석과 광고와 원격 로깅 SDK가 없고, 프로토콜 디버그 출력은 켜지 않습니다.
-- HTML 메일은 정제, JavaScript 차단, 콘텐츠 보안 정책, 외부 이미지 기본 차단, 링크 확인 창으로 다룹니다.
-- 계정을 삭제하면 그 계정의 자격 증명, 캐시, 발송 대기 항목, 알림 기록만 지웁니다. 설정 화면에서 전체 초기화도 할 수 있습니다.
-
-## 알려진 제약과 후속 작업
-
-- 첨부파일 송수신, 고급 검색과 서버 측 검색, 다중 선택 작업, 계정 간 메일 이동은 이번 범위에 없습니다. 첨부가 있는 수신 메일은 첨부 존재와 파일 이름만 보여 주고 열 수 없다는 점을 밝힙니다. 첨부 버튼은 없습니다.
-- 토큰 인증(OAuth)은 구현하지 않았습니다. 인증 방식은 계정 모델에서 분리되어 있어(`AuthMethod`) 나중에 붙일 수 있습니다. Gmail에서 필요하다고 판단되면 다음을 준비해야 합니다. 조사 결과(구글 공식 문서 확인): 본인의 Google Cloud 프로젝트와 OAuth 클라이언트 ID가 필요합니다. 동의 화면의 게시 상태가 "테스트"인 외부 사용자 유형 프로젝트는 갱신 토큰이 7일 뒤 만료되며(이름, 이메일, 프로필 범위만 요청할 때만 예외), 메일 전체 접근 범위는 이 예외에 해당하지 않아서 7일마다 다시 동의해야 합니다. 공식 문서상 개발 중인 앱과 개인 시험용은 검증이 필요 없다고 되어 있으나 검증되지 않은 앱은 경고 화면과 사용자 100명 제한이 따라붙습니다. 메일 전체 접근 범위를 제한 범위로 분류한다는 점은 공식 문서의 범위 표에서 직접 확인하지 못했습니다(가정). 그래서 1차 구현의 Gmail 기본 경로는 앱 비밀번호입니다. 앱 비밀번호를 만들 수 없는 계정(회사, 학교, 보안 키 전용, 고급 보호)은 이 앱으로 연결할 수 없습니다.
-- Gmail의 점과 `+` 별칭처럼 서비스가 같은 사서함으로 취급하는 주소 변형은 중복 등록을 막지 못합니다.
-- 메일 목록의 첨부 표시는 머리글(`multipart/mixed`)과 앞부분 16KB로 추정하고, 상세 화면에서 정확한 목록을 보여 줍니다.
-- 한 번에 가져오는 처음 페이지는 계정과 폴더마다 최신 50통이며 이전 메일은 "더 보기"로 불러옵니다.
-- 서비스별 보낸 편지함 자동 저장, 전달 헤더, 폴더 속성 같은 동작은 `docs/providers.md`의 미확인 항목을 실제 계정으로 확인한 뒤 프로필 값을 고쳐야 합니다.
-- 실시간 서비스는 앱이 화면에 있을 때만 시작할 수 있는 안드로이드 제약이 있습니다.
-- 계정 하나에 로그인 이름이 하나뿐이라 IMAP과 SMTP가 같은 이름을 씁니다. Apple 문서처럼 IMAP은 주소 앞부분, SMTP는 전체 주소가 필요한 경우는 지원하지 못합니다(이전 클라이언트에서는 전체 주소로 동작했습니다).
-- 메일 상세에서 화면을 회전하면 스크롤 위치가 처음으로 돌아가고 링크 확인 창이 닫힙니다. HTML 메일을 열 때마다 내장 서체 6.7MB를 읽습니다.
-- 계정 추가 첫 화면에서 시스템 뒤로 가기를 누르면 앱이 종료됩니다(돌아갈 곳이 없기 때문). 실기기에서의 동작은 확인하지 못했습니다.
-- 서버가 BODYSTRUCTURE를 라이브러리가 읽지 못하는 형태로 돌려주면 본문을 지연해서 읽을 수 없어서 메일 전체를 받아 해석합니다(테스트 서버에서 겪었고 대체 경로를 만들었습니다).
-- 시스템 언어가 한국어가 아니면 답장 인용문의 날짜가 시스템 언어 형식으로 나옵니다.
-
-## 알파, 베타, 릴리스 후보 의존성
-
-- `androidx.compose.material3:material3:1.5.0-rc01`(릴리스 후보): Expressive 컴포넌트가 이 계열에만 있습니다. 이유와 되돌리는 방법은 `docs/decisions.md` 4절에 있습니다.
-- 그 밖의 의존성은 모두 안정판입니다(AGP 9.5.1, Kotlin 2.4.21, KSP 2.3.14, Room 2.8.5, WorkManager 2.12.0, DataStore 1.3.0, Navigation Compose 2.10.2, Lifecycle 2.11.0, Compose BOM 2026.09.00, Material3 adaptive 1.3.0, android-mail 1.6.8, jsoup 1.24.1).
-
-## 오픈소스 고지
-
-Pretendard(SIL OFL 1.1), Jakarta Mail과 Activation의 Android 배포판(EPL 2.0, GPL 2.0 클래스패스 예외), jsoup(MIT), AndroidX와 Kotlin(Apache 2.0)을 사용합니다. 원문은 `third_party/`와 앱의 설정 화면 오픈소스 고지에 있습니다.
+[Apache License 2.0](LICENSE)을 따릅니다. 앱 로고와 Dustbird라는 이름은 이 라이선스에 포함되지 않습니다. 함께 쓰는 서체와 라이브러리의 라이선스 원문은 [`third_party/`](third_party/)에 있습니다.
