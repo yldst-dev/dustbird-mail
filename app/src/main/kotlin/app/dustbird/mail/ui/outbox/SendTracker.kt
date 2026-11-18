@@ -1,5 +1,6 @@
 package app.dustbird.mail.ui.outbox
 
+import app.dustbird.mail.ui.theme.rememberHaptics
 import android.widget.Toast
 import androidx.annotation.StringRes
 import androidx.compose.animation.AnimatedVisibility
@@ -85,7 +86,13 @@ fun SendTracker(onEdit: (Long) -> Unit, onOpenOutbox: () -> Unit, modifier: Modi
             now = System.currentTimeMillis()
         }
     }
+    val haptics = rememberHaptics()
     LaunchedEffect(row?.id, phase) {
+        when (phase) {
+            TrackedPhase.SENT -> haptics.confirm()
+            TrackedPhase.FAILED, TrackedPhase.COPY_FAILED -> haptics.reject()
+            else -> Unit
+        }
         if (row != null && phase == TrackedPhase.SENT) {
             delay(2500)
             send.untrack(row.id)
@@ -124,6 +131,7 @@ fun SendTracker(onEdit: (Long) -> Unit, onOpenOutbox: () -> Unit, modifier: Modi
                         onClick = {
                             val id = row?.id ?: return@TextButton
                             if (current == TrackedPhase.WAITING) {
+                                haptics.tick()
                                 scope.launch {
                                     val draftId = send.cancelHeld(id)
                                     if (draftId != null) onEdit(draftId) else Toast.makeText(context.applicationContext, R.string.send_tracker_too_late, Toast.LENGTH_SHORT).show()

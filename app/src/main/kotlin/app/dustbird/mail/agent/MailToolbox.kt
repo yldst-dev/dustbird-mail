@@ -279,12 +279,16 @@ class MailToolbox(
         val to = addresses(args.optJSONArray("to"))
         val cc = addresses(args.optJSONArray("cc"))
         val allowedIds = allowed().map { it.id }.toSet()
-        val identities = accounts.identities.first().filter { it.accountId in allowedIds }
+        var identities = accounts.identities.first().filter { it.accountId in allowedIds }
         if (identities.isEmpty()) throw Refusal("No sender address is available.")
         val content = if (args.has("reply_to_id") && !args.isNull("reply_to_id")) {
             val original = rows(JSONArray().put(args.optLong("reply_to_id", -1))).firstOrNull() ?: throw Refusal("No such mail to reply to.")
-            val seed = mail.replySeed(original.id, args.optBoolean("reply_all"), resources.getString(R.string.agent_reply_attribution, sender(original)))
+            val seed = mail.replySeed(
+                original.id, args.optBoolean("reply_all"), resources.getString(R.string.agent_reply_attribution, sender(original)),
+                hiddenAddressLabel = resources.getString(R.string.compose_hidden_address_label),
+            )
                 ?: throw Refusal("The original mail could not be loaded.")
+            identities = accounts.identities.first().filter { it.accountId in allowedIds }
             val identity = identities.firstOrNull { it.id == seed.identityId } ?: identities.first { it.accountId == original.accountId }
             DraftContent(
                 id = null,

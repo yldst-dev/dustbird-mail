@@ -125,6 +125,23 @@ class ExtraBehaviorTest {
     }
 
     @Test
+    fun iCloudAliasesShowTheirAddressAndSentMailHasNoReceivedLabel() = runBlocking<Unit> {
+        val container = isolatedContainer()
+        val accountId = assertIs<AddAccountResult.Added>(
+            container.accounts.addAccount(NewAccount("icloud", "i", "i", "primary@icloud.com", "me@mydomain.example", "", imap, smtp), "pw"),
+        ).accountId
+        val inbox = container.db.folders().insert(folderEntity(accountId))
+        val sent = container.db.folders().insert(folderEntity(accountId).copy(path = "Sent Messages", role = FolderRole.SENT))
+        container.db.messages().upsert(messageEntity(accountId, inbox, "가리기 주소로 온 메일", "relay.word@icloud.com"))
+        container.db.messages().upsert(messageEntity(accountId, sent, "내가 보낸 메일", "friend@example.test").copy(uid = 2, messageId = "<y@example.test>"))
+
+        val inboxRow = container.mail.messages(MailboxScope.Folder(accountId, inbox), 10).first().single()
+        assertEquals(RecipientMatch.OwnAddress("relay.word@icloud.com"), inboxRow.match)
+        val sentRow = container.mail.messages(MailboxScope.Folder(accountId, sent), 10).first().single()
+        assertEquals(RecipientMatch.NotReceived, sentRow.match)
+    }
+
+    @Test
     fun anIdentityAddedLaterLabelsMailThatArrivedBefore() = runBlocking<Unit> {
         val container = isolatedContainer()
         val accountId = assertIs<AddAccountResult.Added>(

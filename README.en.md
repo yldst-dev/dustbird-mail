@@ -29,15 +29,16 @@
 
 ## Features
 
-- **Accounts**: iCloud Mail, Gmail, Naver Mail, and any IMAP/SMTP server. Add as many accounts and sender identities as you need.
+- **Search**: filters for date and time range, folder, account, field, unread, starred and attachments
+- **Accounts**: iCloud Mail, Gmail, Naver Mail, Outlook Mail (Microsoft sign-in), and any IMAP/SMTP server. Add as many accounts and sender identities as you need.
 - **Receiving**: unified inbox, manual, periodic (about every 15 minutes) and real-time (IMAP IDLE) sync, per-account notifications
 - **Reading and tidying**: sanitized HTML with remote images blocked by default, swipe to archive or delete, multi-select, undo
 - **Writing**: reply and forward, attachments, recipient suggestions, undo send, scheduled send, drafts
-- **Agent**: finds, summarizes, drafts replies and tidies up. It is off by default, and every send needs your approval.
+- **Agent**: finds, summarizes, drafts replies and tidies up, shows one-line summaries in the inbox and helps write mail in the composer. It is off by default, and every send needs your approval.
 - **Security**: credentials encrypted with a per-account Android Keystore key, TLS-only connections, no analytics or ad SDKs
 
 > [!NOTE]
-> Real iCloud, Gmail and Naver accounts have not been verified yet. Development and testing used a local test mail server only. The app is not on any store; you build it and install it on your own device.
+> Real iCloud, Gmail, Naver and Outlook accounts have not been verified yet. Development and testing used a local test mail server only. The app is not on any store; you build it and install it on your own device.
 
 ## Build and install
 

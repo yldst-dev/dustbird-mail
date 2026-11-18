@@ -33,13 +33,39 @@ class ProviderAndSessionTest {
     }
 
     @Test
-    fun noProfileOffersTokenAuthenticationYet() {
-        assertTrue(Providers.all.none { AuthMethod.OAUTH2 in it.authMethods })
+    fun onlyOutlookUsesTokenAuthentication() {
+        assertEquals(listOf("outlook"), Providers.all.filter { AuthMethod.OAUTH2 in it.authMethods }.map { it.id })
+        assertEquals(ServerEndpoint("outlook.office365.com", 993, TransportSecurity.TLS), Providers.OUTLOOK.imap)
+        assertEquals(ServerEndpoint("smtp-mail.outlook.com", 587, TransportSecurity.STARTTLS), Providers.OUTLOOK.smtp)
+    }
+
+    @Test
+    fun bearerCredentialsSwitchBothProtocolsToXoauth2AndHideThePrefix() {
+        val endpoint = ServerEndpoint("h.example.test", 1, TransportSecurity.TLS)
+        val token = app.dustbird.mail.core.model.Credentials("user@example.test", app.dustbird.mail.core.model.Credentials.BEARER_PREFIX + "token-1")
+        assertTrue(token.bearer)
+        assertEquals("token-1", token.password)
+        assertEquals("XOAUTH2", SessionConfig.imap(endpoint, token.bearer).getProperty("mail.imap.auth.mechanisms"))
+        assertEquals("XOAUTH2", SessionConfig.smtp(endpoint, bearer = token.bearer).getProperty("mail.smtp.auth.mechanisms"))
+        val plain = app.dustbird.mail.core.model.Credentials("user@example.test", "app-password")
+        assertFalse(plain.bearer)
+        assertEquals("app-password", plain.password)
     }
 
     @Test
     fun usernameFollowsProfileStyle() {
-        assertEquals("user@example.test", Providers.usernameFor(Providers.ICLOUD, "user@example.test"))
+        assertEquals("user@icloud.com", Providers.usernameFor(Providers.ICLOUD, "user@icloud.com"))
+        assertEquals("user@me.com", Providers.usernameFor(Providers.ICLOUD, "user@me.com"))
+        assertEquals("user@example.test", Providers.usernameFor(Providers.GMAIL, "user@example.test"))
+    }
+
+    @Test
+    fun aCustomDomainOnICloudLeavesTheLoginNameForTheICloudAddress() {
+        assertTrue(Providers.isCustomICloudDomain(Providers.ICLOUD, "user@example.test"))
+        assertEquals("", Providers.usernameFor(Providers.ICLOUD, "user@example.test"))
+        assertFalse(Providers.isCustomICloudDomain(Providers.ICLOUD, "user@iCloud.com"))
+        assertFalse(Providers.isCustomICloudDomain(Providers.ICLOUD, "user@exa"))
+        assertFalse(Providers.isCustomICloudDomain(Providers.GMAIL, "user@example.test"))
     }
 
     @Test

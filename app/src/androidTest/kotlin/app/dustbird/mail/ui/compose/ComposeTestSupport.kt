@@ -6,6 +6,8 @@ import androidx.lifecycle.SavedStateHandle
 import androidx.room.Room
 import androidx.test.platform.app.InstrumentationRegistry
 import app.dustbird.mail.AppContainer
+import app.dustbird.mail.core.agent.AgentBackend
+import app.dustbird.mail.core.model.EmailAddress
 import app.dustbird.mail.core.model.AuthMethod
 import app.dustbird.mail.core.model.FolderRole
 import app.dustbird.mail.core.model.SendVerification
@@ -44,10 +46,10 @@ internal data class SeededIdentity(val accountId: Long, val identityId: Long, va
 
 internal data class SeededMessage(val accountId: Long, val identityId: Long, val messageId: Long)
 
-internal class ComposeFixture {
+internal class ComposeFixture(agentBackend: AgentBackend? = null) {
     val context: Context = InstrumentationRegistry.getInstrumentation().targetContext
     val db: MailDatabase = Room.inMemoryDatabaseBuilder(context, MailDatabase::class.java).build()
-    val container = AppContainer(context, credentials = FakeCredentialStore(), db = db)
+    val container = AppContainer(context, credentials = FakeCredentialStore(), db = db, agentBackend = agentBackend)
     private var previousDefault: Long? = null
     private var previousDelay = 0
 
@@ -66,11 +68,10 @@ internal class ComposeFixture {
         db.close()
     }
 
-    fun seedAccount(key: String, signature: String = ""): SeededIdentity = runBlocking {
-        val address = "$key@example.com"
+    fun seedAccount(key: String, signature: String = "", providerId: String = "custom", address: String = "$key@example.com", username: String = address): SeededIdentity = runBlocking {
         val accountId = db.accounts().insert(
             AccountEntity(
-                providerId = "custom", displayName = key, label = key, username = address, imapHost = "imap.$key.test", imapPort = 993,
+                providerId = providerId, displayName = key, label = key, username = username, imapHost = "imap.$key.test", imapPort = 993,
                 imapSecurity = TransportSecurity.TLS, smtpHost = "smtp.$key.test", smtpPort = 587, smtpSecurity = TransportSecurity.STARTTLS,
                 authMethod = AuthMethod.APP_PASSWORD, sortOrder = db.accounts().nextSortOrder(), syncMode = SyncMode.MANUAL,
                 notificationsEnabled = true, needsReauth = false, mailboxKey = key,
@@ -87,7 +88,7 @@ internal class ComposeFixture {
 
     fun setDefaultIdentity(identityId: Long) = runBlocking { container.accounts.setAppDefaultIdentity(identityId) }
 
-    fun seedMessage(owner: SeededIdentity, fromAddress: String, subject: String, text: String, messageIdHeader: String): SeededMessage = runBlocking {
+    fun seedMessage(owner: SeededIdentity, fromAddress: String, subject: String, text: String, messageIdHeader: String, to: List<EmailAddress> = emptyList(), cc: List<EmailAddress> = emptyList()): SeededMessage = runBlocking {
         val folderId = db.folders().insert(
             FolderEntity(
                 accountId = owner.accountId, path = "INBOX", delimiter = "/", attributes = "", role = FolderRole.INBOX, roleConfirmed = true,
@@ -97,8 +98,8 @@ internal class ComposeFixture {
         val id = db.messages().upsert(
             MessageEntity(
                 accountId = owner.accountId, folderId = folderId, uid = 1, uidValidity = 1, messageId = messageIdHeader, inReplyTo = null,
-                references = "", fromName = null, fromAddress = fromAddress, replyTo = "", toAddresses = Codec.addresses(emptyList()),
-                ccAddresses = "", deliveryValues = "", subject = subject, sortDate = 1_700_000_000_000, preview = "", size = 1,
+                references = "", fromName = null, fromAddress = fromAddress, replyTo = "", toAddresses = Codec.addresses(to),
+                ccAddresses = Codec.addresses(cc), deliveryValues = "", subject = subject, sortDate = 1_700_000_000_000, preview = "", size = 1,
                 hasAttachment = false, seen = true, answered = false, flagged = false, allowRemoteImages = false,
             ),
         )

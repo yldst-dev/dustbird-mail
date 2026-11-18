@@ -21,6 +21,7 @@ import app.dustbird.mail.data.repo.MailRepository
 import app.dustbird.mail.data.repo.MaintenanceRepository
 import app.dustbird.mail.data.secure.CredentialStore
 import app.dustbird.mail.data.secure.KeystoreCredentialStore
+import app.dustbird.mail.data.secure.TokenCredentialStore
 import app.dustbird.mail.sync.ImapAccess
 import app.dustbird.mail.sync.MailNotifier
 import app.dustbird.mail.sync.SendService
@@ -38,12 +39,13 @@ import app.dustbird.mail.ui.nav.ComposePrefill
 import app.dustbird.mail.core.agent.AgentBackend
 import app.dustbird.mail.agent.MailToolbox
 import app.dustbird.mail.agent.AgentService
+import app.dustbird.mail.agent.InboxDigests
 
 class AppContainer(
     private val context: Context,
     val connector: ImapConnector = JakartaImapConnector,
     val smtpSender: SmtpSender = JakartaSmtpSender,
-    val credentials: CredentialStore = KeystoreCredentialStore(context),
+    val credentials: CredentialStore = TokenCredentialStore(KeystoreCredentialStore(context)),
     val db: MailDatabase = MailDatabase.create(context),
     notifierFactory: (AppContainer) -> MailNotifier = { AndroidNotifier(context, it.settings) },
     agentBackend: AgentBackend? = null,
@@ -55,10 +57,13 @@ class AppContainer(
     val accounts: AccountRepository = AccountRepository(db, credentials, settings, files) { sync.forget(it) }
     val imapAccess = ImapAccess(db, credentials, connector)
     val sync: SyncService by lazy {
-        SyncService(db, imapAccess, accounts, notifier, onNewMail = { accountId, rows -> scope.launch { agent.onNewMail(accountId, rows) } })
+        SyncService(db, imapAccess, accounts, notifier, onNewMail = { accountId, rows ->
+            digests.refresh()
+            scope.launch { agent.onNewMail(accountId, rows) }
+        })
     }
     val prefill = MutableStateFlow<ComposePrefill?>(null)
-    val mail = MailRepository(db, accounts, imapAccess, files, onSeenChanged = { sync.sweepNotifications(it) })
+    val mail = MailRepository(db, accounts, imapAccess, files, onSeenChanged = { sync.sweepNotifications(it) }, digestsShown = settings.agent.map { it.digestsOn })
     val drafts = DraftRepository(db, imapAccess, files)
     val actions: MailActions by lazy { MailActions(db, imapAccess, scope, afterCommit = { ids -> sync.syncAccounts(ids) }) }
     val maintenance: MaintenanceRepository by lazy { MaintenanceRepository(db, credentials, settings, notifier, files) }
@@ -98,6 +103,8 @@ class AppContainer(
         )
     }
 
+    val digests: InboxDigests by lazy { InboxDigests(db, settings, mail, agent, scope) }
+
     fun resumeIdle() {
         scope.launch { idle.apply(accounts.accounts.first().any(::wantsIdle)) }
     }
@@ -120,6 +127,9 @@ class AppContainer(
         scope.launch { notifier.prune(accounts.accounts.first().map { it.id }.toSet()) }
         scope.launch {
             agent.automations.map { list -> list.any { it.enabled && it.trigger == AgentService.TRIGGER_DAILY } }.distinctUntilChanged().collect { scheduler.applyAgent(it) }
+        }
+        scope.launch {
+            settings.agent.map { it.digestsOn }.distinctUntilChanged().collect { if (it) digests.refresh() }
         }
     }
 }

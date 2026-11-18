@@ -174,16 +174,21 @@ class CodexAuthTest {
         val container = AppContainer(context, connector = ImapConnector { _, _ -> throw IOException("no network in tests") }, credentials = secrets, db = db)
         val polls = AtomicInteger()
         MockHttp(contentType = "application/json") { path, _ ->
-            when (path) {
-                "/api/accounts/deviceauth/usercode" -> 200 to "{\"device_auth_id\":\"dev-1\",\"user_code\":\"ABCD-12345\",\"interval\":\"1\"}"
-                "/api/accounts/deviceauth/token" ->
+            when {
+                path == "/api/accounts/deviceauth/usercode" -> 200 to "{\"device_auth_id\":\"dev-1\",\"user_code\":\"ABCD-12345\",\"interval\":\"1\"}"
+                path == "/api/accounts/deviceauth/token" ->
                     if (polls.getAndIncrement() == 0) 403 to pending else 200 to "{\"authorization_code\":\"code-1\",\"code_verifier\":\"verifier-1\"}"
+                path == "/release" -> 200 to "{\"tag_name\":\"rust-v0.171.0\",\"prerelease\":false}"
+                path.startsWith("/codex/models?") -> 200 to catalog
                 else -> 200 to tokens(accessToken(expires = System.currentTimeMillis() / 1000 + 3600)).toString()
             }
         }.use { server ->
             try {
                 container.settings.clearAll()
-                val service = AgentService(db, container.settings, secrets, container.accounts, container.toolbox, container.scope, userAgent = agentName, authIssuer = server.baseUrl)
+                val service = AgentService(
+                    db, container.settings, secrets, container.accounts, container.toolbox, container.scope,
+                    userAgent = agentName, authIssuer = server.baseUrl, codexBase = server.baseUrl + "/codex", codexRelease = server.baseUrl + "/release",
+                )
                 service.update { it.copy(consent = true) }
                 assertNull(service.config())
                 service.startLogin()
@@ -194,8 +199,17 @@ class CodexAuthTest {
                 assertEquals(2, polls.get())
                 assertEquals("user@example.com", service.chatGptAccount())
                 assertEquals(AgentMode.CHATGPT, service.current.first().mode)
+                val synced = withTimeout(10_000) { service.models(AgentMode.CHATGPT).first { it.isNotEmpty() } }
+                assertEquals(listOf("gpt-new-sol", "gpt-new-astra", "gpt-plain"), synced.map { it.slug })
+                val listRequest = server.headers.single { it.startsWith("GET /codex/models?") }
+                assertTrue(listRequest.startsWith("GET /codex/models?client_version=0.171.0 "))
+                assertTrue("Bearer " in listRequest && "ChatGPT-Account-ID: acct-1" in listRequest)
+                assertEquals("0.171.0", container.settings.codexVersion.first())
                 val config = assertNotNullValue(service.config())
-                assertEquals(CodexAuth.BASE_URL, config.baseUrl)
+                assertEquals("gpt-new-sol", config.model)
+                service.update { it.copy(model = "gpt-new-astra") }
+                assertEquals("gpt-new-astra", assertNotNullValue(service.config()).model)
+                assertEquals(server.baseUrl + "/codex", config.baseUrl)
                 assertEquals("acct-1", config.headers["ChatGPT-Account-ID"])
                 assertEquals("dustbird", config.headers["originator"])
                 assertTrue(config.encryptedReasoning)
@@ -203,9 +217,63 @@ class CodexAuthTest {
                 service.signOut()
                 assertNull(service.chatGptAccount())
                 assertEquals(AgentMode.OFF, service.current.first().mode)
+                assertTrue(service.models(AgentMode.CHATGPT).first().isEmpty())
             } finally {
                 container.scope.cancel()
                 db.close()
+            }
+        }
+    }
+
+    private val catalog = JSONObject().put(
+        "models",
+        org.json.JSONArray()
+            .put(JSONObject().put("slug", "gpt-new-astra").put("display_name", "GPT New Astra").put("description", "Most capable.").put("visibility", "list").put("priority", 2))
+            .put(JSONObject().put("slug", "gpt-review").put("display_name", "Review").put("visibility", "hide").put("priority", 0))
+            .put(JSONObject().put("slug", "gpt-new-sol").put("display_name", "GPT New Sol").put("description", JSONObject.NULL).put("visibility", "list").put("priority", 1))
+            .put(JSONObject().put("slug", "../escape").put("display_name", "Bad").put("visibility", "list").put("priority", 3))
+            .put(JSONObject().put("slug", "gpt-new-sol").put("display_name", "Duplicate").put("visibility", "list").put("priority", 4))
+            .put(JSONObject().put("slug", "gpt-plain").put("display_name", "  \u0007 ").put("visibility", "list").put("priority", 5)),
+    ).toString()
+
+    @Test
+    fun modelListKeepsPickerModelsInPriorityOrderAndDropsUnsafeEntries() {
+        val models = CodexAuth.modelsOf(JSONObject(catalog))
+        assertEquals(listOf("gpt-new-sol", "gpt-new-astra", "gpt-plain"), models.map { it.slug })
+        assertEquals("GPT New Sol", models[0].name)
+        assertEquals("", models[0].description)
+        assertEquals("Most capable.", models[1].description)
+        assertEquals("gpt-plain", models[2].name)
+        assertEquals(models, AgentModel.fromStored(AgentModel.stored(models)))
+        assertTrue(AgentModel.fromStored("not json").isEmpty())
+        assertTrue(CodexAuth.modelsOf(JSONObject()).isEmpty())
+    }
+
+    @Test
+    fun modelListAsksWithTheTokenAndTheLatestCodexVersion() {
+        val credential = CodexAuth.credentialOf(tokens(), now, previous = null)
+        MockHttp(contentType = "application/json") { path, _ ->
+            when (path) {
+                "/latest" -> 200 to "{\"tag_name\":\"rust-v0.180.2\",\"prerelease\":false}"
+                "/pre" -> 200 to "{\"tag_name\":\"rust-v0.181.0-alpha.1\",\"prerelease\":true}"
+                "/odd" -> 200 to "{\"tag_name\":\"v1\"}"
+                "/models?client_version=0.180.2" -> 200 to catalog
+                else -> 401 to "{\"error\":{\"code\":\"token_expired\"}}"
+            }
+        }.use { server ->
+            assertEquals("0.180.2", CodexAuth.latestVersion(agentName, server.baseUrl + "/latest"))
+            assertNull(CodexAuth.latestVersion(agentName, server.baseUrl + "/pre"))
+            assertNull(CodexAuth.latestVersion(agentName, server.baseUrl + "/odd"))
+            val models = CodexAuth.models(credential, agentName, "0.180.2", server.baseUrl)
+            assertEquals("gpt-new-sol", models.first().slug)
+            val sent = server.headers.single { it.startsWith("GET /models?") }
+            assertTrue("Authorization: Bearer ${credential.accessToken}" in sent)
+            assertTrue("ChatGPT-Account-ID: acct-1" in sent && "originator: dustbird" in sent)
+            rejected("token_expired") { CodexAuth.models(credential, agentName, "0.180.3", server.baseUrl) }
+            try {
+                CodexAuth.models(credential, agentName, "0.1.0&x=1", server.baseUrl)
+                fail("Expected an invalid version to be refused")
+            } catch (_: IllegalArgumentException) {
             }
         }
     }

@@ -1,5 +1,6 @@
 package app.dustbird.mail.ui.message
 
+import app.dustbird.mail.ui.theme.rememberHaptics
 import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.widget.Toast
@@ -64,6 +65,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MessageRoute(messageId: Long, onBack: () -> Unit, onCompose: (ComposeArgs) -> Unit, onOpenAgent: (Long?) -> Unit = {}) {
+    val haptics = rememberHaptics()
     val viewModel = appViewModel(key = "message-$messageId") { MessageViewModel(it, messageId) }
     val header by viewModel.header.collectAsStateWithLifecycle()
     val inInbox = (header as? HeaderState.Found)?.detail?.folderRole == FolderRole.INBOX
@@ -80,7 +82,7 @@ fun MessageRoute(messageId: Long, onBack: () -> Unit, onCompose: (ComposeArgs) -
                 },
                 actions = {
                     if (inInbox) {
-                        IconButton(onClick = { viewModel.move(MoveTarget.Role(FolderRole.ARCHIVE)) }) {
+                        IconButton(onClick = { haptics.confirm(); viewModel.move(MoveTarget.Role(FolderRole.ARCHIVE)) }) {
                             Icon(painterResource(R.drawable.ic_archive), contentDescription = stringResource(R.string.message_archive))
                         }
                     }
@@ -128,6 +130,7 @@ private fun MessageContent(
     docked: Boolean = false,
     bottomInset: Dp = 0.dp,
 ) {
+    val haptics = rememberHaptics()
     key(messageId) {
         val viewModel = appViewModel(key = "message-$messageId") { MessageViewModel(it, messageId) }
         val header by viewModel.header.collectAsStateWithLifecycle()
@@ -184,8 +187,8 @@ private fun MessageContent(
                     MessageActions(
                         onSetSeen = viewModel::setSeen,
                         onStar = viewModel::setFlagged,
-                        onArchive = { viewModel.move(MoveTarget.Role(FolderRole.ARCHIVE)) },
-                        onDelete = viewModel::delete,
+                        onArchive = { haptics.confirm(); viewModel.move(MoveTarget.Role(FolderRole.ARCHIVE)) },
+                        onDelete = { haptics.confirm(); viewModel.delete() },
                         onMove = { picking = true },
                         onSpam = { viewModel.move(MoveTarget.Role(if (it) FolderRole.SPAM else FolderRole.INBOX)) },
                         onAgent = { onOpenAgent(messageId) },

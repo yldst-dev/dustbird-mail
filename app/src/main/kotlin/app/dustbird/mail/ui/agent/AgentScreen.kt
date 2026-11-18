@@ -472,6 +472,22 @@ private fun ErrorCard(error: AgentRunError) {
     }
 }
 
+@Composable
+fun AgentFailureMessage(failure: BackendFailure, detail: String) {
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Text(stringResource(agentFailureText(failure)), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error)
+        if (detail.isNotBlank()) {
+            SelectionContainer {
+                Text(
+                    stringResource(R.string.agent_error_detail, detail),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+    }
+}
+
 fun agentFailureText(failure: BackendFailure): Int = when (failure) {
     BackendFailure.NOT_CONFIGURED -> R.string.agent_error_not_configured
     BackendFailure.AUTH -> R.string.agent_error_auth

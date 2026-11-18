@@ -2,6 +2,9 @@ package app.dustbird.mail.ui.mailbox
 
 import android.view.KeyEvent
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.hapticfeedback.HapticFeedback
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assertCountEquals
@@ -18,6 +21,7 @@ import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.swipeDown
 import androidx.compose.ui.test.swipeLeft
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
@@ -274,5 +278,34 @@ class MailboxScreenTest {
         waitForText("Cached subject")
         waitForText(mailbox.text(R.string.mailbox_problem_reauth))
         compose.onNode(hasText("Other cached subject")).assertExists()
+    }
+
+    @Test
+    fun pullingPastTheRefreshThresholdTapsOnceAndTheRefreshEndStaysQuiet() {
+        runBlocking {
+            val solo = mailbox.account("solo", "Solo")
+            mailbox.message(solo, mailbox.inbox(solo), uid = 1, subject = "Pull me")
+        }
+        val taps = java.util.concurrent.CopyOnWriteArrayList<HapticFeedbackType>()
+        val feedback = object : HapticFeedback {
+            override fun performHapticFeedback(hapticFeedbackType: HapticFeedbackType) {
+                taps += hapticFeedbackType
+            }
+        }
+        compose.setContent {
+            DustbirdTheme {
+                CompositionLocalProvider(LocalAppContainer provides mailbox.container, LocalHapticFeedback provides feedback) {
+                    MailboxRoute(onOpenMessage = {}, onCompose = {}, onOpenAccounts = {}, onOpenSettings = {}, onOpenOutbox = {})
+                }
+            }
+        }
+        waitForText("Pull me")
+        compose.waitForIdle()
+        taps.clear()
+        compose.onNodeWithText("Pull me").performTouchInput { swipeDown(startY = centerY, endY = centerY + 1_200f, durationMillis = 800) }
+        compose.waitUntil(5_000) { HapticFeedbackType.GestureThresholdActivate in taps }
+        compose.mainClock.advanceTimeBy(3_000)
+        compose.waitForIdle()
+        assertEquals(listOf(HapticFeedbackType.GestureThresholdActivate), taps.toList())
     }
 }

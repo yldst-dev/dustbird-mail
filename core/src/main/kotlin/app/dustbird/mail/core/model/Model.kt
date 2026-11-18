@@ -55,5 +55,12 @@ data class MailIdentity(
 )
 
 data class Credentials(val username: String, val secret: String) {
+    val bearer: Boolean get() = secret.startsWith(BEARER_PREFIX)
+    val password: String get() = secret.removePrefix(BEARER_PREFIX)
+
     override fun toString(): String = "Credentials(username=***, secret=***)"
+
+    companion object {
+        const val BEARER_PREFIX = "oauth2-bearer:"
+    }
 }

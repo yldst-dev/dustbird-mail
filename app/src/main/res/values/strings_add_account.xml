@@ -15,6 +15,14 @@
     <string name="add_account_service_icloud">iCloud 메일</string>
     <string name="add_account_service_gmail">Gmail</string>
     <string name="add_account_service_naver">네이버 메일</string>
+    <string name="add_account_service_outlook">Outlook 메일</string>
+    <string name="add_account_service_outlook_hint">Microsoft 로그인으로 연결합니다</string>
+    <string name="add_account_prepare_outlook_1">Outlook, Hotmail, Live 주소는 비밀번호나 앱 비밀번호로 연결할 수 없고 Microsoft 로그인으로만 연결됩니다.</string>
+    <string name="add_account_prepare_outlook_2">다음 화면에서 \"Microsoft로 로그인\"을 누르면 코드가 나옵니다. 그 코드를 Microsoft 로그인 페이지에 넣고 메일 접근을 허용합니다.</string>
+    <string name="add_account_prepare_outlook_3">로그인 화면에는 이 앱 대신 Thunderbird라는 이름이 보입니다. Thunderbird 메일 앱의 공개 ID를 빌려 쓰기 때문이며, Microsoft가 이 방식을 막으면 연결되지 않을 수 있습니다.</string>
+    <string name="add_account_prepare_outlook_4">직접 등록한 앱으로 연결하려면 Microsoft Entra 관리 센터에서 앱을 만들어 그 ID로 바꿔 넣습니다. 개인 Microsoft 계정과 공용 클라이언트 흐름을 허용해야 합니다.</string>
+    <string name="add_account_prepare_outlook_5">회사나 학교 계정은 관리자가 IMAP이나 외부 앱을 막아 두면 연결되지 않습니다.</string>
+    <string name="add_account_fail_auth_outlook">로그인한 Microsoft 계정과 입력한 메일 주소가 같은지 확인해 주세요. Outlook 웹 설정의 메일 동기화에서 IMAP 사용이 꺼져 있으면 켜야 합니다.</string>
     <string name="add_account_service_custom">직접 설정</string>
     <string name="add_account_service_icloud_hint">앱 전용 암호가 필요합니다</string>
     <string name="add_account_service_gmail_hint">앱 비밀번호가 필요합니다</string>
@@ -64,6 +72,8 @@
     <string name="add_account_advanced_expanded">펼쳐짐</string>
     <string name="add_account_advanced_collapsed">접힘</string>
     <string name="add_account_field_username">로그인 이름</string>
+    <string name="add_account_icloud_custom_domain">iCloud에 연결한 내 도메인 주소입니다. iCloud는 이 주소로 로그인을 받지 않으니, 고급 설정의 로그인 이름에 기본 iCloud 메일 주소를 넣어 주세요.</string>
+    <string name="add_account_icloud_username_hint">기본 iCloud 메일 주소 전체를 넣어 주세요. 예: name@icloud.com</string>
     <string name="add_account_field_username_hint">서버에 로그인할 때 쓰는 이름입니다.</string>
     <string name="add_account_section_imap">받는 서버 (IMAP)</string>
     <string name="add_account_section_smtp">보내는 서버 (SMTP)</string>
@@ -106,7 +116,7 @@
 
     <string name="add_account_fail_auth_title">로그인이 거부되었습니다</string>
     <string name="add_account_fail_auth_body">로그인 이름이나 비밀번호가 맞지 않거나, 평소 쓰는 로그인 비밀번호를 입력했을 수 있습니다. 서비스에서 따로 만든 비밀번호를 다시 입력해 주세요.</string>
-    <string name="add_account_fail_auth_icloud">Apple 계정에서 2단계 인증을 켠 뒤 만든 앱 전용 암호인지 확인해 주세요. Apple 안내에 따르면 받는 서버의 사용자 이름은 보통 메일 주소의 @ 앞부분이고, 보내는 서버의 사용자 이름은 전체 주소입니다. 계속 거부되면 고급 설정의 로그인 이름에 @ 앞부분만 입력해 보세요. 그래도 연결되지 않으면 전체 주소로 되돌려 보세요.</string>
+    <string name="add_account_fail_auth_icloud">Apple 계정에서 2단계 인증을 켠 뒤 만든 앱 전용 암호인지 확인해 주세요. 로그인 이름은 기본 iCloud 메일 주소 전체(@icloud.com, @me.com, @mac.com)여야 합니다. iCloud에 연결한 내 도메인 주소로 추가할 때도 고급 설정의 로그인 이름에는 기본 iCloud 메일 주소를 넣어야 합니다.</string>
     <string name="add_account_fail_auth_gmail">2단계 인증을 켠 개인 Google 계정에서 만든 16자리 앱 비밀번호인지 확인해 주세요. 회사나 학교 계정 등은 앱 비밀번호를 만들 수 없어서 이 앱에 추가할 수 없습니다.</string>
     <string name="add_account_fail_auth_naver">PC에서 만든 애플리케이션 비밀번호인지 확인해 주세요. 2025년 6월 24일부터 평소 쓰는 비밀번호는 쓸 수 없습니다. 로그인 이름은 네이버 메일 주소 전체여야 합니다.</string>
     <string name="add_account_fail_auth_custom">로그인 이름과 비밀번호를 서비스 안내와 비교해 주세요. 서비스가 앱 비밀번호를 요구하면 평소 쓰는 비밀번호로는 로그인되지 않습니다.</string>

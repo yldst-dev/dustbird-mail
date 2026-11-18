@@ -1,5 +1,6 @@
 package app.dustbird.mail.ui.mailbox
 
+import app.dustbird.mail.ui.theme.rememberHaptics
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -27,6 +28,10 @@ import androidx.compose.material3.pulltorefresh.PullToRefreshDefaults
 import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
+import kotlinx.coroutines.flow.distinctUntilChanged
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.snapshotFlow
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
@@ -86,6 +91,7 @@ fun MailboxPane(
     val indexed = remember(state.accounts) { state.accounts.withIndex().associateBy { it.value.id } }
     val showAccounts = state.accounts.size > 1 && state.scope == MailboxScope.Unified
     val selecting = state.selection.isNotEmpty()
+    val haptics = rememberHaptics()
     val role = state.scopeRole()
     val swipeArchive = !selecting && role == FolderRole.INBOX
     val swipeDelete = !selecting && role != FolderRole.TRASH
@@ -107,6 +113,12 @@ fun MailboxPane(
         }
         if (state.accounts.isNotEmpty()) FilterRow(state.filter, actions.onFilter)
         val refreshState = rememberPullToRefreshState()
+        val refreshing by rememberUpdatedState(state.refreshing)
+        LaunchedEffect(refreshState) {
+            snapshotFlow { refreshState.distanceFraction >= 1f }
+                .distinctUntilChanged()
+                .collect { past -> if (past && !refreshing) haptics.threshold() }
+        }
         PullToRefreshBox(
             isRefreshing = state.refreshing,
             onRefresh = onRefresh,
@@ -152,7 +164,14 @@ fun MailboxPane(
                                 accountIndex = account?.index ?: 0,
                                 identityLabels = state.identityLabels,
                                 selected = if (selectable) message.id == state.selectedId else null,
-                                onClick = { if (selecting) actions.onToggle(message.id) else actions.onOpen(message.id) },
+                                onClick = {
+                                    if (selecting) {
+                                        haptics.tick()
+                                        actions.onToggle(message.id)
+                                    } else {
+                                        actions.onOpen(message.id)
+                                    }
+                                },
                                 checked = message.id in state.selection,
                                 onLongClick = { actions.onToggle(message.id) },
                             )
@@ -180,6 +199,7 @@ fun MailboxPane(
 
 @Composable
 private fun FilterRow(filter: MessageFilter, onFilter: (MessageFilter) -> Unit) {
+    val haptics = rememberHaptics()
     Row(
         Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp).padding(bottom = 4.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -189,7 +209,7 @@ private fun FilterRow(filter: MessageFilter, onFilter: (MessageFilter) -> Unit) 
             MessageFilter.UNREAD to R.string.mailbox_filter_unread,
             MessageFilter.FLAGGED to R.string.mailbox_filter_starred,
         ).forEach { (value, label) ->
-            FilterChip(selected = filter == value, onClick = { onFilter(value) }, label = { Text(stringResource(label)) }, shape = Pill)
+            FilterChip(selected = filter == value, onClick = { haptics.tick(); onFilter(value) }, label = { Text(stringResource(label)) }, shape = Pill)
         }
     }
 }
@@ -205,6 +225,14 @@ private fun SwipeRow(
 ) {
     val threshold = SwipeToDismissBoxDefaults.positionalThreshold
     val dismiss = remember { SwipeToDismissBoxState(SwipeToDismissBoxValue.Settled, threshold) }
+    val haptics = rememberHaptics()
+    val armed = remember { arrayOf(SwipeToDismissBoxValue.Settled) }
+    LaunchedEffect(dismiss.targetValue) {
+        if (dismiss.targetValue != armed[0]) {
+            if (dismiss.targetValue == SwipeToDismissBoxValue.Settled) haptics.tick() else haptics.threshold()
+            armed[0] = dismiss.targetValue
+        }
+    }
     LaunchedEffect(dismiss.currentValue) {
         if (dismiss.currentValue != SwipeToDismissBoxValue.Settled) {
             delay(700)

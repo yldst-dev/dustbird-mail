@@ -69,7 +69,8 @@ class MockHttp(private val contentType: String = "text/event-stream", private va
                     val (status, answer) = respond(lines.first().split(' ').getOrElse(1) { "" }, text)
                     val bytes = answer.toByteArray(Charsets.UTF_8)
                     socket.getOutputStream().apply {
-                        write("HTTP/1.1 $status X\r\nContent-Type: $contentType\r\nContent-Length: ${bytes.size}\r\nConnection: close\r\n\r\n".toByteArray(Charsets.US_ASCII))
+                        val type = if (contentType.isEmpty()) "" else "Content-Type: $contentType\r\n"
+                        write("HTTP/1.1 $status X\r\n${type}Content-Length: ${bytes.size}\r\nConnection: close\r\n\r\n".toByteArray(Charsets.US_ASCII))
                         write(bytes)
                         flush()
                     }

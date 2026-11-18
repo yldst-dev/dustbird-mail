@@ -22,6 +22,39 @@ object SignatureBlock {
     }
 }
 
+object DraftParts {
+    data class Parts(val own: String, val quote: String, val signature: String)
+
+    private val quoteMark = Regex("(?m)^(?:>|-{5,})")
+
+    fun split(body: String, signature: String, anchor: String?): Parts {
+        val block = SignatureBlock.block(signature)
+        val trimmed = body.trimEnd()
+        val signatureStart = if (signature.isNotBlank() && trimmed.endsWith(block)) trimmed.length - block.length else body.length
+        val head = body.substring(0, signatureStart)
+        val quoteStart = anchor?.takeIf { it.isNotBlank() }?.let { head.indexOf(it) }?.takeIf { it >= 0 } ?: quoteStart(head)
+        return Parts(
+            own = (if (quoteStart == null) head else head.substring(0, quoteStart)).trim(),
+            quote = if (quoteStart == null) "" else head.substring(quoteStart).trim(),
+            signature = body.substring(signatureStart),
+        )
+    }
+
+    fun join(own: String, parts: Parts): String = buildString {
+        append(own.trim())
+        if (parts.quote.isNotEmpty()) append("\n\n").append(parts.quote)
+        append(parts.signature)
+    }
+
+    private fun quoteStart(text: String): Int? {
+        val start = quoteMark.find(text)?.range?.first ?: return null
+        if (text[start] != '>') return start
+        val before = text.substring(0, start).trimEnd('\n', '\r')
+        val lineStart = before.lastIndexOf('\n') + 1
+        return if (before.substring(lineStart).trimEnd().endsWith(":")) lineStart else start
+    }
+}
+
 object RecipientInput {
     data class Split(val tokens: List<String>, val rest: String)
 

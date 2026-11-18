@@ -11,10 +11,11 @@ import androidx.room.RoomDatabase
         AccountEntity::class, IdentityEntity::class, FolderEntity::class, MessageEntity::class, MessageBodyEntity::class,
         DraftEntity::class, OutboxEntity::class, PendingFlagEntity::class, NotifiedEntity::class, DraftAttachmentEntity::class,
         AgentSessionEntity::class, AgentItemEntity::class, AgentMemoryEntity::class, AgentAutomationEntity::class, AgentLogEntity::class,
+        MessageDigestEntity::class,
     ],
-    version = 3,
+    version = 4,
     exportSchema = true,
-    autoMigrations = [AutoMigration(from = 1, to = 2), AutoMigration(from = 2, to = 3)],
+    autoMigrations = [AutoMigration(from = 1, to = 2), AutoMigration(from = 2, to = 3), AutoMigration(from = 3, to = 4)],
 )
 abstract class MailDatabase : RoomDatabase() {
     abstract fun accounts(): AccountDao
@@ -29,6 +30,7 @@ abstract class MailDatabase : RoomDatabase() {
     abstract fun notified(): NotifiedDao
     abstract fun sync(): SyncDao
     abstract fun maintenance(): MaintenanceDao
+    abstract fun digests(): DigestDao
 
     companion object {
         fun create(context: Context): MailDatabase =

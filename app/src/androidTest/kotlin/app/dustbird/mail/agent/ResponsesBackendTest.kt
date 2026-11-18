@@ -123,6 +123,32 @@ class ResponsesBackendTest {
     }
 
     @Test
+    fun theAnswerIsReadByItsContentWhenTheServerSendsNoContentType() = runBlocking {
+        val stream = sse(
+            JSONObject().put("type", "response.output_item.done").put("item", message),
+            JSONObject().put("type", "response.completed").put("response", JSONObject()),
+        )
+        MockHttp(contentType = "") { _, _ -> 200 to stream }.use { server ->
+            val backend = ResponsesBackend { BackendConfig(server.baseUrl, "t", "m") }
+            assertEquals("찾았습니다", backend.respond(request()) {}.single().text)
+        }
+        MockHttp(contentType = "text/plain") { _, _ -> 200 to "\n  " + JSONObject().put("output", org.json.JSONArray().put(message)) }.use { server ->
+            val backend = ResponsesBackend { BackendConfig(server.baseUrl, "t", "m") }
+            assertEquals("찾았습니다", backend.respond(request()) {}.single().text)
+        }
+        MockHttp(contentType = "") { _, _ -> 200 to "event: response.created\ndata: not json\n\n" }.use { server ->
+            val backend = ResponsesBackend { BackendConfig(server.baseUrl, "t", "m") }
+            try {
+                backend.respond(request()) {}
+                fail("Expected an unreadable answer")
+            } catch (error: AgentBackendException) {
+                assertEquals(BackendFailure.SERVER, error.failure)
+                assertTrue(error.message.orEmpty().contains("response.created"))
+            }
+        }
+    }
+
+    @Test
     fun httpErrorsAreClassified() = runBlocking {
         MockHttp(contentType = "application/json") { _, _ -> 401 to "{\"error\":{\"message\":\"bad key\",\"code\":\"invalid_api_key\"}}" }.use { server ->
             val backend = ResponsesBackend { BackendConfig(server.baseUrl, "t", "m") }

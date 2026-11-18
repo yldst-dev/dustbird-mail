@@ -55,16 +55,15 @@ class ResponsesBackend(private val config: suspend () -> BackendConfig?) : Agent
                     val body = connection.errorStream?.bufferedReader(Charsets.UTF_8)?.use { it.readText() }.orEmpty()
                     throw ResponsesWire.httpFailure(status, body)
                 }
-                val streamed = connection.contentType.orEmpty().contains("text/event-stream", ignoreCase = true)
                 connection.inputStream.bufferedReader(Charsets.UTF_8).use { reader ->
-                    if (streamed) ResponsesWire.readStream(reader, onTextDelta) else ResponsesWire.readJson(reader.readText())
+                    if (ResponsesWire.startsWithJson(reader)) ResponsesWire.readJson(reader.readText()) else ResponsesWire.readStream(reader, onTextDelta)
                 }
             } catch (error: AgentBackendException) {
                 throw error
             } catch (error: IOException) {
                 throw AgentBackendException(BackendFailure.NETWORK, error.message ?: "Network error")
             } catch (error: JSONException) {
-                throw AgentBackendException(BackendFailure.SERVER, "The server answer could not be read")
+                throw AgentBackendException(BackendFailure.SERVER, "The server answer could not be read (${connection.contentType}): ${error.message.orEmpty().take(160)}")
             } finally {
                 cancel?.dispose()
                 connection.disconnect()
@@ -75,6 +74,7 @@ class ResponsesBackend(private val config: suspend () -> BackendConfig?) : Agent
 
 object ResponsesWire {
     const val NAMESPACE = "mail"
+    private const val PEEK_LIMIT = 4096
 
     fun requestBody(request: AgentRequest, config: BackendConfig): String = JSONObject().apply {
         put("model", config.model)
@@ -112,6 +112,20 @@ object ResponsesWire {
         }
     }
 
+    fun startsWithJson(reader: BufferedReader): Boolean {
+        reader.mark(PEEK_LIMIT)
+        try {
+            repeat(PEEK_LIMIT - 1) {
+                val next = reader.read()
+                if (next < 0) return false
+                if (!next.toChar().isWhitespace()) return next.toChar() == '{'
+            }
+            return false
+        } finally {
+            reader.reset()
+        }
+    }
+
     fun readStream(reader: BufferedReader, onTextDelta: (String) -> Unit): List<AgentItem.Model> {
         val items = ArrayList<AgentItem.Model>()
         var completed = false
@@ -127,7 +141,11 @@ object ResponsesWire {
                 completed = completed || items.isNotEmpty()
                 return
             }
-            val json = JSONObject(payload)
+            val json = try {
+                JSONObject(payload)
+            } catch (error: JSONException) {
+                throw JSONException("event '$name' was not JSON: " + payload.take(60).replace('\n', ' '))
+            }
             when (json.optString("type", name).ifEmpty { name }) {
                 "response.output_text.delta" -> onTextDelta(json.optString("delta"))
                 "response.output_item.done" -> json.optJSONObject("item")?.let { items += itemOf(it) }

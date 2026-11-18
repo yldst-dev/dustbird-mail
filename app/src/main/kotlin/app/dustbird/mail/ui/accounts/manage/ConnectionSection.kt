@@ -1,5 +1,7 @@
 package app.dustbird.mail.ui.accounts.manage
 
+import app.dustbird.mail.data.secure.SignInState
+import app.dustbird.mail.ui.accounts.MicrosoftSignInPanel
 import androidx.annotation.StringRes
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -32,6 +34,7 @@ import app.dustbird.mail.core.net.CheckResult
 import app.dustbird.mail.sync.AccountSyncState
 import app.dustbird.mail.ui.theme.Pill
 import app.dustbird.mail.ui.theme.pillFieldColors
+import app.dustbird.mail.ui.theme.hiddenSecret
 
 @Composable
 fun ConnectionSection(
@@ -42,6 +45,7 @@ fun ConnectionSection(
     showReauth: Boolean,
     onRecheck: () -> Unit,
     onReauth: (String) -> Unit,
+    tokenLogin: TokenLogin? = null,
 ) {
     val problem = account.hasConnectionProblem(syncState)
     Section(R.string.accounts_connection_heading) {
@@ -66,22 +70,30 @@ fun ConnectionSection(
         }
         if (showReauth) {
             Text(stringResource(R.string.accounts_reauth_form_heading), style = MaterialTheme.typography.titleMedium)
-            ReauthForm(reauth, onReauth)
+            ReauthForm(reauth, onReauth, tokenLogin)
         }
     }
 }
 
+class TokenLogin(val clientId: TextFieldState, val state: SignInState, val onStart: () -> Unit, val onCancel: () -> Unit)
+
 @Composable
-fun ReauthForm(reauth: Reauth, onSubmit: (String) -> Unit) {
+fun ReauthForm(reauth: Reauth, onSubmit: (String) -> Unit, tokenLogin: TokenLogin? = null) {
     val password = remember { TextFieldState() }
     LaunchedEffect(reauth) {
         if (reauth != Reauth.Idle && reauth != Reauth.Checking) password.clearText()
+    }
+    if (tokenLogin != null) {
+        Text(stringResource(R.string.microsoft_reauth_hint), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        MicrosoftSignInPanel(tokenLogin.clientId, tokenLogin.state, tokenLogin.onStart, tokenLogin.onCancel)
+        ReauthStatus(reauth)
+        return
     }
     Text(stringResource(R.string.accounts_reauth_hint), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
     SecureTextField(
         state = password,
         label = { Text(stringResource(R.string.accounts_password)) },
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier.fillMaxWidth().hiddenSecret(password.text.length),
         shape = Pill,
         colors = pillFieldColors(),
         textObfuscationMode = TextObfuscationMode.Hidden,
@@ -91,6 +103,11 @@ fun ReauthForm(reauth: Reauth, onSubmit: (String) -> Unit) {
         onClick = { onSubmit(password.text.toString()) },
         enabled = password.text.isNotEmpty() && reauth != Reauth.Checking,
     ) { Text(stringResource(R.string.accounts_reauth_submit)) }
+    ReauthStatus(reauth)
+}
+
+@Composable
+private fun ReauthStatus(reauth: Reauth) {
     Column(Modifier.semantics { liveRegion = LiveRegionMode.Polite }, verticalArrangement = Arrangement.spacedBy(4.dp)) {
         when (reauth) {
             Reauth.Idle -> Unit

@@ -1,5 +1,6 @@
 package app.dustbird.mail.ui.accounts.manage
 
+import app.dustbird.mail.ui.theme.rememberHaptics
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -37,6 +38,7 @@ fun BasicsSection(account: MailAccount) {
     val container = LocalAppContainer.current
     val resources = LocalResources.current
     val scope = rememberCoroutineScope()
+    val haptics = rememberHaptics()
     var displayName by rememberSaveable(account.id) { mutableStateOf(account.displayName) }
     var label by rememberSaveable(account.id) { mutableStateOf(account.label) }
     var syncMode by rememberSaveable(account.id) { mutableStateOf(account.syncMode) }
@@ -78,6 +80,7 @@ fun BasicsSection(account: MailAccount) {
                 value = notifications,
                 role = Role.Switch,
                 onValueChange = { enabled ->
+                    haptics.toggle(enabled)
                     notifications = enabled
                     note = null
                     scope.launch {

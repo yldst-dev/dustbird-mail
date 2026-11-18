@@ -13,6 +13,8 @@ import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertIsOff
 import androidx.compose.ui.test.assertIsOn
+import androidx.compose.ui.test.assertCountEquals
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithText
@@ -34,6 +36,7 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 @RunWith(AndroidJUnit4::class)
@@ -124,5 +127,32 @@ class AddAccountStepsTest {
         compose.onNodeWithText(
             string(R.string.add_account_assist_done, string(R.string.add_account_field_address) + ", " + string(R.string.add_account_section_imap)),
         ).assertExists()
+    }
+
+    @Test
+    fun aHiddenPasswordIsMaskedForAccessibilityAndAnICloudCustomDomainOpensTheLoginName() {
+        val secret = "abcd-efgh-ijkl-mnop"
+        val fields = AddAccountFields().apply { reset(Providers.ICLOUD, "iCloud") }
+        compose.setContent {
+            DustbirdTheme {
+                FormStep(Providers.ICLOUD.id, fields, false, rememberMotion(), {}, AssistState.Idle, false, {}, {}, {})
+            }
+        }
+        compose.runOnUiThread { fields.password.setTextAndPlaceCursorAtEnd(secret) }
+        compose.waitForIdle()
+        val password = compose.onNode(SemanticsMatcher.keyIsDefined(SemanticsProperties.Password)).fetchSemanticsNode()
+        assertEquals("\u2022".repeat(secret.length), password.config[SemanticsProperties.EditableText].text)
+        compose.onAllNodes(hasText(secret, substring = true)).assertCountEquals(0)
+        compose.onAllNodes(hasText(secret, substring = true), useUnmergedTree = true).assertCountEquals(0)
+        compose.onNodeWithText(string(R.string.add_account_password_show)).performClick()
+        compose.onAllNodes(hasText(secret)).assertCountEquals(1)
+
+        assertFalse(fields.advancedOpen)
+        compose.runOnUiThread { fields.address.setTextAndPlaceCursorAtEnd("user@example.test") }
+        compose.onNodeWithText(string(R.string.add_account_icloud_custom_domain)).assertExists()
+        compose.waitUntil(5_000) { fields.advancedOpen }
+        compose.onNodeWithText(string(R.string.add_account_icloud_username_hint)).assertExists()
+        compose.runOnUiThread { fields.address.setTextAndPlaceCursorAtEnd("user@icloud.com") }
+        compose.onAllNodes(hasText(string(R.string.add_account_icloud_custom_domain))).assertCountEquals(0)
     }
 }

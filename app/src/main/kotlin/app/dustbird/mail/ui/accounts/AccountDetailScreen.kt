@@ -1,5 +1,7 @@
 package app.dustbird.mail.ui.accounts
 
+import app.dustbird.mail.core.model.AuthMethod
+import app.dustbird.mail.ui.accounts.manage.TokenLogin
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -93,6 +95,8 @@ private fun AccountDetailContent(account: MailAccount, accentIndex: Int?, viewMo
     val testSend by viewModel.testSend.collectAsStateWithLifecycle()
     val removal by viewModel.removal.collectAsStateWithLifecycle()
     val reauthRequired = account.reauthRequired(syncState)
+    val signIn by viewModel.signIn.collectAsStateWithLifecycle()
+    val tokenLogin = if (account.authMethod == AuthMethod.OAUTH2) TokenLogin(viewModel.clientId, signIn, viewModel::startSignIn, viewModel::cancelSignIn) else null
 
     Column(Modifier.widthIn(max = 640.dp).fillMaxSize().verticalScroll(rememberScrollState()).padding(bottom = 24.dp)) {
         if (reauthRequired) {
@@ -100,7 +104,7 @@ private fun AccountDetailContent(account: MailAccount, accentIndex: Int?, viewMo
                 Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Text(stringResource(R.string.accounts_reauth_title), style = MaterialTheme.typography.titleLargeEmphasized)
                     Text(stringResource(R.string.accounts_reauth_body))
-                    ReauthForm(reauth, viewModel::reauthenticate)
+                    ReauthForm(reauth, viewModel::reauthenticate, tokenLogin)
                 }
             }
         }
@@ -113,6 +117,7 @@ private fun AccountDetailContent(account: MailAccount, accentIndex: Int?, viewMo
             showReauth = !reauthRequired,
             onRecheck = viewModel::recheck,
             onReauth = viewModel::reauthenticate,
+            tokenLogin = tokenLogin,
         )
         ServerSection(account)
         IdentitiesSection(account, accentIndex, identities, appDefaultId, testSend, viewModel::testSend)

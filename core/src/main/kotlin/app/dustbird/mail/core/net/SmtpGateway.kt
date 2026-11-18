@@ -47,11 +47,11 @@ object ConnectFailures {
 
 object JakartaSmtpSender : SmtpSender {
     override fun send(endpoint: ServerEndpoint, credentials: Credentials, message: ComposedMessage): SmtpOutcome {
-        val session = Session.getInstance(SessionConfig.smtp(endpoint, message.envelopeFrom))
+        val session = Session.getInstance(SessionConfig.smtp(endpoint, message.envelopeFrom, credentials.bearer))
         val transport = PhaseTrackingTransport(session)
         try {
             try {
-                transport.connect(endpoint.host, endpoint.port, credentials.username, credentials.secret)
+                transport.connect(endpoint.host, endpoint.port, credentials.username, credentials.password)
             } catch (error: Exception) {
                 return when (ConnectFailures.classify(error)) {
                     ConnectFailure.AUTH, ConnectFailure.SERVICE_DISABLED -> SmtpOutcome.Rejected(RejectKind.AUTH, null, error.message.orEmpty())

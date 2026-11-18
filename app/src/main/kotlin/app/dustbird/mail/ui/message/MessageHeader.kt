@@ -1,5 +1,6 @@
 package app.dustbird.mail.ui.message
 
+import app.dustbird.mail.ui.theme.rememberHaptics
 import androidx.annotation.StringRes
 import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.background
@@ -82,6 +83,7 @@ class MessageActions(
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 internal fun MessageHeader(state: HeaderState.Found, actions: MessageActions, modifier: Modifier = Modifier, side: Dp = 0.dp) {
+    val haptics = rememberHaptics()
     val summary = state.detail.summary
     val scheme = MaterialTheme.colorScheme
     var menuOpen by remember { mutableStateOf(false) }
@@ -94,7 +96,7 @@ internal fun MessageHeader(state: HeaderState.Found, actions: MessageActions, mo
             )
             FilledTonalIconToggleButton(
                 checked = summary.flagged,
-                onCheckedChange = actions.onStar,
+                onCheckedChange = { haptics.toggle(it); actions.onStar(it) },
                 colors = IconButtonDefaults.filledTonalIconToggleButtonColors(
                     containerColor = Color.Transparent,
                     contentColor = scheme.onSurfaceVariant,

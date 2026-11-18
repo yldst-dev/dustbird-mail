@@ -1,5 +1,11 @@
 package app.dustbird.mail.ui.accounts.manage
 
+import androidx.compose.foundation.text.input.TextFieldState
+import androidx.compose.foundation.text.input.setTextAndPlaceCursorAtEnd
+import app.dustbird.mail.data.secure.MicrosoftOAuth
+import app.dustbird.mail.data.secure.MicrosoftSignIn
+import app.dustbird.mail.data.secure.OAuthToken
+import app.dustbird.mail.data.secure.SignInState
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import app.dustbird.mail.AppContainer
@@ -77,6 +83,21 @@ class AccountDetailViewModel(private val container: AppContainer, private val ac
     private val _reauth = MutableStateFlow<Reauth>(Reauth.Idle)
     val reauth: StateFlow<Reauth> = _reauth.asStateFlow()
 
+    val clientId = TextFieldState()
+    private val microsoft = MicrosoftSignIn(container.scope) { token ->
+        container.settings.setMicrosoftClientId(token.clientId)
+        reauthenticate(token.encode())
+    }
+    val signIn: StateFlow<SignInState> = microsoft.state
+
+    init {
+        viewModelScope.launch { clientId.setTextAndPlaceCursorAtEnd(container.settings.microsoftClientId.first().ifBlank { MicrosoftOAuth.THUNDERBIRD_CLIENT_ID }) }
+    }
+
+    fun startSignIn() = microsoft.start(clientId.text.toString())
+
+    fun cancelSignIn() = microsoft.cancel()
+
     private val _testSend = MutableStateFlow<TestSend>(TestSend.Idle)
     val testSend: StateFlow<TestSend> = _testSend.asStateFlow()
 
@@ -113,7 +134,7 @@ class AccountDetailViewModel(private val container: AppContainer, private val ac
                 _reauth.value = Reauth.StoreFailed
                 return@launch
             }
-            val (imap, smtp) = runChecks(account, Credentials(account.username, secret))
+            val (imap, smtp) = runChecks(account, Credentials(account.username, OAuthToken.loginSecret(secret)))
             if (imap !is CheckResult.Ok) {
                 _reauth.value = Reauth.Failed(imap, smtp)
                 return@launch

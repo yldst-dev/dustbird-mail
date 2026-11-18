@@ -56,7 +56,7 @@ import app.dustbird.mail.ui.mailbox.AccountLabel
 import app.dustbird.mail.ui.mailbox.IdentityLabel
 import app.dustbird.mail.ui.mailbox.rememberAnimationsEnabled
 import app.dustbird.mail.ui.mailbox.rememberMessageTimeFormatter
-import app.dustbird.mail.ui.theme.Capsule
+import app.dustbird.mail.ui.theme.FlatCard
 import app.dustbird.mail.ui.theme.CapsuleGap
 import app.dustbird.mail.ui.theme.FlatSnackbarHost
 import app.dustbird.mail.ui.theme.capsuleShape
@@ -125,7 +125,7 @@ fun OutboxRoute(onBack: () -> Unit, onEditDraft: (Long) -> Unit = {}) {
                 ) {
                     itemsIndexed(list, key = { _, item -> item.id }) { index, item ->
                         val account = indexed[item.accountId]
-                        Capsule(if (animations) Modifier.animateItem(effects, spatial, effects) else Modifier) {
+                        FlatCard(if (animations) Modifier.animateItem(effects, spatial, effects) else Modifier) {
                             OutboxRow(
                                 item = item,
                                 presentation = outboxPresentation(

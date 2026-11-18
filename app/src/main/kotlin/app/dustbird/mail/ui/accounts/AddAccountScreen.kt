@@ -66,6 +66,7 @@ fun AddAccountRoute(onBack: () -> Unit, onDone: () -> Unit, onOpenAgentSettings:
         factory = viewModelFactory { initializer { AddAccountViewModel(container, createSavedStateHandle()) } },
     )
     val state by viewModel.state.collectAsStateWithLifecycle()
+    val signIn by viewModel.signIn.collectAsStateWithLifecycle()
     val hasAccounts by remember(container) { container.accounts.accounts.map { it.isNotEmpty() } }
         .collectAsStateWithLifecycle(initialValue = false)
     val agentReady by remember(container) { container.agent.current.map { it.mode != AgentMode.OFF && it.consent } }
@@ -100,6 +101,7 @@ fun AddAccountRoute(onBack: () -> Unit, onDone: () -> Unit, onOpenAgentSettings:
             LinearProgressIndicator(
                 progress = { progress },
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp).semantics { contentDescription = progressLabel },
+                drawStopIndicator = {},
             )
             AnimatedContent(
                 targetState = state.step,
@@ -122,6 +124,7 @@ fun AddAccountRoute(onBack: () -> Unit, onDone: () -> Unit, onOpenAgentSettings:
                     step == AddStep.FORM -> FormStep(
                         providerId, viewModel.fields, state.showErrors, motion, viewModel::verify,
                         state.assist, agentReady, viewModel::assist, viewModel::dismissAssist, onOpenAgentSettings,
+                        signIn, viewModel.clientId, viewModel::startSignIn, viewModel::cancelSignIn,
                     )
                     step == AddStep.VERIFY -> VerifyStep(state, viewModel::save, viewModel::backToForm, viewModel::verify)
                     step == AddStep.SYNC -> SyncStep(state, viewModel::retrySync, viewModel::continueAfterSync, viewModel::finish)

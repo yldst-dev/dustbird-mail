@@ -58,3 +58,16 @@
 ## 직접 설정
 
 서버 이름, 포트, 보안 방식(TLS 또는 STARTTLS만), 사용자 이름을 모두 입력받습니다. 암호화 없는 연결은 선택지가 없습니다.
+
+## Outlook 메일
+
+| 항목 | 값 | 근거 |
+| --- | --- | --- |
+| 수신 | outlook.office365.com, 993, TLS | Microsoft 문서와 지원 글(2026-11-18 검색). 이 앱에서는 미확인 |
+| 발신 | smtp-mail.outlook.com, 587, STARTTLS | 개인 계정용 서버. 회사 계정은 smtp.office365.com을 쓰므로 직접 맞춰야 할 수 있음. 미확인 |
+| 인증 | OAuth 2.0(XOAUTH2)만 가능. 비밀번호와 앱 비밀번호는 2024년 9월 16일부터 쓸 수 없음 | Microsoft 지원 글 |
+| 로그인 방식 | 기기 코드. `login.microsoftonline.com/common/oauth2/v2.0`의 `devicecode`와 `token` | Microsoft 문서. 가짜 ID로 요청해 주소와 오류 형식만 확인(2026-11-18) |
+| 권한 범위 | `https://outlook.office.com/IMAP.AccessAsUser.All`, `https://outlook.office.com/SMTP.Send`, `offline_access` | Microsoft 문서. 개인 계정에서 SMTP가 거부된다는 개발자 보고가 있어 실제 확인 필요 |
+| 애플리케이션 ID | 기본값은 Thunderbird의 공개 ID. 직접 등록한 ID(개인 Microsoft 계정 허용, 공용 클라이언트 흐름 허용)로 바꿀 수 있음 | 사용자 결정(2026-11-18). 이 ID로 기기 코드 발급까지 확인, 로그인 완료는 미확인 |
+| 보낸 편지함 자동 저장 | 프로필은 "저장함"으로 둠 | 알려진 동작이지만 미확인. 없으면 저장 실패로 표시되고 직접 저장을 고를 수 있음 |
+| 폴더 속성, IDLE, 동시 연결 한도, 로그인 실패 응답 | - | 미확인 |

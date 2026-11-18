@@ -2,6 +2,10 @@
 
 package app.dustbird.mail.ui.accounts.add
 
+import app.dustbird.mail.ui.theme.rememberHaptics
+import app.dustbird.mail.core.model.AuthMethod
+import app.dustbird.mail.data.secure.SignInState
+import app.dustbird.mail.ui.accounts.MicrosoftSignInPanel
 import androidx.annotation.DrawableRes
 import androidx.annotation.StringRes
 import androidx.compose.animation.AnimatedVisibility
@@ -53,6 +57,7 @@ import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.MotionScheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.RadioButton
@@ -100,6 +105,7 @@ import app.dustbird.mail.core.net.CheckResult
 import app.dustbird.mail.core.net.ConnectFailure
 import app.dustbird.mail.core.provider.Providers
 import app.dustbird.mail.sync.SyncOutcome
+import app.dustbird.mail.ui.agent.AgentFailureMessage
 import app.dustbird.mail.ui.agent.agentFailureText
 import app.dustbird.mail.ui.mailbox.rememberAnimationsEnabled
 import app.dustbird.mail.ui.theme.CapsuleGap
@@ -107,6 +113,7 @@ import app.dustbird.mail.ui.theme.CapsulePadding
 import app.dustbird.mail.ui.theme.FlatCard
 import app.dustbird.mail.ui.theme.Pill
 import app.dustbird.mail.ui.theme.cardItemShapes
+import app.dustbird.mail.ui.theme.hiddenSecret
 import app.dustbird.mail.ui.theme.pillFieldColors
 import app.dustbird.mail.ui.theme.pillToggleShapes
 
@@ -216,6 +223,7 @@ private fun Notice(@DrawableRes icon: Int, text: String, color: Color) {
 
 @Composable
 fun PrepareStep(providerId: String, acknowledged: Boolean, motion: Motion, onAcknowledge: (Boolean) -> Unit, onNext: () -> Unit) {
+    val haptics = rememberHaptics()
     val texts = serviceTexts(providerId)
     val steps = texts.checklist.filterNot { it in texts.notes }
     val marker = with(LocalDensity.current) { 28.sp.toDp() }
@@ -232,7 +240,7 @@ fun PrepareStep(providerId: String, acknowledged: Boolean, motion: Motion, onAck
                     .heightIn(min = 56.dp)
                     .clip(Pill)
                     .background(container)
-                    .toggleable(value = acknowledged, role = Role.Checkbox, onValueChange = onAcknowledge)
+                    .toggleable(value = acknowledged, role = Role.Checkbox, onValueChange = { haptics.toggle(it); onAcknowledge(it) })
                     .padding(horizontal = 16.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -249,6 +257,8 @@ fun PrepareStep(providerId: String, acknowledged: Boolean, motion: Motion, onAck
     ) {
         if (providerId == Providers.CUSTOM.id) {
             Notice(R.drawable.ic_info, stringResource(R.string.add_account_prepare_custom_intro), MaterialTheme.colorScheme.secondaryContainer)
+        } else if (providerId == Providers.OUTLOOK.id) {
+            Notice(R.drawable.ic_info, stringResource(R.string.add_account_prepare_outlook_1), MaterialTheme.colorScheme.secondaryContainer)
         } else {
             Notice(
                 R.drawable.ic_warning,
@@ -351,6 +361,7 @@ private fun AssistSheet(text: TextFieldState, @StringRes example: Int, assist: A
     val running = assist is AssistState.Running
     ModalBottomSheet(
         onDismissRequest = onDismiss,
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
         shape = MaterialTheme.shapes.extraExtraLarge.copy(bottomStart = ZeroCornerSize, bottomEnd = ZeroCornerSize),
     ) {
         Column(
@@ -393,11 +404,7 @@ private fun AssistSheet(text: TextFieldState, @StringRes example: Int, assist: A
                         LoadingIndicator(Modifier.size(36.dp))
                         Text(stringResource(R.string.add_account_assist_running), style = MaterialTheme.typography.bodyMedium)
                     }
-                    is AssistState.Failed -> Text(
-                        stringResource(agentFailureText(assist.failure)),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.error,
-                    )
+                    is AssistState.Failed -> AgentFailureMessage(assist.failure, assist.detail)
                     is AssistState.Done -> if (assist.filled.isEmpty()) {
                         Text(stringResource(R.string.add_account_assist_empty), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error)
                     }
@@ -424,8 +431,13 @@ fun FormStep(
     onAssist: (String) -> Unit,
     onDismissAssist: () -> Unit,
     onOpenAgentSettings: () -> Unit,
+    signIn: SignInState = SignInState.Idle,
+    clientId: TextFieldState? = null,
+    onSignIn: () -> Unit = {},
+    onCancelSignIn: () -> Unit = {},
 ) {
     val texts = serviceTexts(providerId)
+    val tokenLogin = clientId != null && AuthMethod.OAUTH2 in Providers.byId(providerId).authMethods
     val invalid = if (showErrors) FormRules.invalidFields(fields.values()) else emptySet()
     var revealed by remember { mutableStateOf(false) }
     var assistOpen by rememberSaveable { mutableStateOf(false) }
@@ -478,16 +490,18 @@ fun FormStep(
                 )
             },
         ) { Text(stringResource(R.string.add_account_assist_title), style = MaterialTheme.typography.titleMediumEmphasized) }
+        val customDomain = Providers.isCustomICloudDomain(Providers.byId(providerId), fields.address.text.toString())
+        LaunchedEffect(customDomain) { if (customDomain) fields.advancedOpen = true }
         Field(
-            fields.address, R.string.add_account_field_address, null,
+            fields.address, R.string.add_account_field_address, R.string.add_account_icloud_custom_domain.takeIf { customDomain },
             if (FormField.ADDRESS in invalid) R.string.add_account_error_address else null,
             keyboardType = KeyboardType.Email,
         )
         val passwordMessage = required(FormField.PASSWORD)
             ?: R.string.add_account_password_hint.takeIf { providerId != Providers.CUSTOM.id }
-        SecureTextField(
+        if (tokenLogin) MicrosoftSignInPanel(clientId!!, signIn, onSignIn, onCancelSignIn) else SecureTextField(
             state = fields.password,
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier.fillMaxWidth().hiddenSecret(fields.password.text.length, hidden = !revealed),
             shape = Pill,
             colors = pillFieldColors(),
             label = { Text(stringResource(texts.secret)) },
@@ -528,7 +542,11 @@ fun FormStep(
                 exit = shrinkVertically(motion.spatial()) + fadeOut(motion.effects()),
             ) {
                 Column(Modifier.fillMaxWidth().padding(top = 8.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                    Field(fields.username, R.string.add_account_field_username, R.string.add_account_field_username_hint, required(FormField.USERNAME), keyboardType = KeyboardType.Email)
+                    Field(
+                        fields.username, R.string.add_account_field_username,
+                        if (customDomain) R.string.add_account_icloud_username_hint else R.string.add_account_field_username_hint,
+                        required(FormField.USERNAME), keyboardType = KeyboardType.Email,
+                    )
                     Text(stringResource(R.string.add_account_section_imap), style = MaterialTheme.typography.titleSmallEmphasized)
                     Field(
                         fields.imapHost, R.string.add_account_field_host, null,

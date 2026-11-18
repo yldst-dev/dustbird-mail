@@ -38,6 +38,14 @@ fun serviceTexts(providerId: String): ServiceTexts = when (providerId) {
         ),
         setOf(R.string.add_account_prepare_naver_4, R.string.add_account_prepare_naver_5),
     )
+    Providers.OUTLOOK.id -> ServiceTexts(
+        R.string.add_account_service_outlook, R.string.add_account_service_outlook_hint, R.string.microsoft_client_id,
+        listOf(
+            R.string.add_account_prepare_outlook_2, R.string.add_account_prepare_outlook_3,
+            R.string.add_account_prepare_outlook_4, R.string.add_account_prepare_outlook_5,
+        ),
+        setOf(R.string.add_account_prepare_outlook_3, R.string.add_account_prepare_outlook_4, R.string.add_account_prepare_outlook_5),
+    )
     else -> ServiceTexts(
         R.string.add_account_service_custom, R.string.add_account_service_custom_hint, R.string.add_account_secret_custom,
         listOf(R.string.add_account_prepare_custom_1, R.string.add_account_prepare_custom_2, R.string.add_account_prepare_custom_3),
@@ -61,6 +69,7 @@ fun failureBodies(failure: ConnectFailure, providerId: String?): List<Int> = whe
             Providers.ICLOUD.id -> R.string.add_account_fail_auth_icloud
             Providers.GMAIL.id -> R.string.add_account_fail_auth_gmail
             Providers.NAVER.id -> R.string.add_account_fail_auth_naver
+            Providers.OUTLOOK.id -> R.string.add_account_fail_auth_outlook
             else -> R.string.add_account_fail_auth_custom
         },
     )

@@ -1,5 +1,6 @@
 package app.dustbird.mail.ui.mailbox
 
+import app.dustbird.mail.ui.theme.rememberHaptics
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
@@ -141,6 +142,7 @@ private fun MailboxScreen(
     val drawerState = rememberDrawerState(DrawerValue.Closed)
     val coroutineScope = rememberCoroutineScope()
     val snackbar = remember { SnackbarHostState() }
+    val haptics = rememberHaptics()
     val resources = LocalResources.current
     val listState = rememberLazyListState()
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
@@ -167,7 +169,12 @@ private fun MailboxScreen(
                             actionLabel = resources.getString(R.string.mailbox_undo),
                             duration = SnackbarDuration.Short,
                         )
-                        if (result == SnackbarResult.ActionPerformed) viewModel.undo(event.ticket) else viewModel.commit(event.ticket)
+                        if (result == SnackbarResult.ActionPerformed) {
+                            haptics.confirm()
+                            viewModel.undo(event.ticket)
+                        } else {
+                            viewModel.commit(event.ticket)
+                        }
                     }
                 }
             }
@@ -242,8 +249,8 @@ private fun MailboxScreen(
                             subtitle = scopeTitle(state).takeIf { (state.unreadInScope() ?: 0) > 0 },
                             scrollBehavior = scrollBehavior,
                             onClose = viewModel::clearSelection,
-                            onArchive = { viewModel.move(state.selection, MoveTarget.Role(FolderRole.ARCHIVE)) },
-                            onDelete = { viewModel.delete(state.selection) },
+                            onArchive = { haptics.confirm(); viewModel.move(state.selection, MoveTarget.Role(FolderRole.ARCHIVE)) },
+                            onDelete = { haptics.confirm(); viewModel.delete(state.selection) },
                             onSeen = { viewModel.setSeen(state.selection, it) },
                             onFlagged = { viewModel.setFlagged(state.selection, it) },
                             onMove = { startMove(state.selection) },

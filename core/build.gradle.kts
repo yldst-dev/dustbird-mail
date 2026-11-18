@@ -31,9 +31,11 @@ dependencies {
 }
 
 val fixturesDir = rootProject.layout.projectDirectory.dir("testfixtures").asFile
+val base64Mitigation = "-XX:-UseBASE64Intrinsics"
 
 tasks.test {
     useJUnit()
+    jvmArgs(base64Mitigation)
     systemProperty("greenmail.classpath", greenmail.asPath)
     systemProperty("fixtures.dir", fixturesDir.absolutePath)
     systemProperty("javax.net.ssl.trustStore", File(fixturesDir, "test-truststore.p12").absolutePath)
@@ -45,6 +47,7 @@ tasks.register<JavaExec>("runTestServer") {
     group = "verification"
     classpath = sourceSets.test.get().runtimeClasspath
     mainClass.set("app.dustbird.mail.core.testing.TestServerMainKt")
+    jvmArgs(base64Mitigation)
     systemProperty("greenmail.classpath", greenmail.asPath)
     systemProperty("fixtures.dir", rootProject.layout.projectDirectory.dir("testfixtures").asFile.absolutePath)
 }

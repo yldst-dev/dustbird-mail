@@ -1,5 +1,6 @@
 package app.dustbird.mail.ui.compose
 
+import app.dustbird.mail.ui.theme.rememberHaptics
 import android.app.Application
 import android.text.format.DateFormat
 import android.text.format.DateUtils
@@ -103,7 +104,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
-fun ComposeRoute(args: ComposeArgs, onClose: () -> Unit) {
+fun ComposeRoute(args: ComposeArgs, onClose: () -> Unit, onOpenAgentSettings: () -> Unit = {}) {
     val container = LocalAppContainer.current
     val context = LocalContext.current
     val resources = LocalResources.current
@@ -141,6 +142,8 @@ fun ComposeRoute(args: ComposeArgs, onClose: () -> Unit) {
         }
     }
     var showSheet by remember { mutableStateOf(false) }
+    var writingOpen by rememberSaveable { mutableStateOf(false) }
+    val agentSettings by remember(container) { container.agent.current }.collectAsStateWithLifecycle(initialValue = null)
     val busy = phase != SendPhase.Idle
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { vm.attach(it) }
 
@@ -169,7 +172,7 @@ fun ComposeRoute(args: ComposeArgs, onClose: () -> Unit) {
         when (vm.loadState) {
             LoadState.Loading -> Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) { LoadingIndicator() }
             LoadState.NoAccount -> NoAccount(onClose, Modifier.padding(padding))
-            LoadState.Ready -> ComposeForm(vm, phase, busy, padding, onPickSender = { showSheet = true })
+            LoadState.Ready -> ComposeForm(vm, phase, busy, padding, onPickSender = { showSheet = true }, onWrite = { writingOpen = true })
         }
     }
 
@@ -182,6 +185,35 @@ fun ComposeRoute(args: ComposeArgs, onClose: () -> Unit) {
                 showSheet = false
             },
             onDismiss = { showSheet = false },
+        )
+    }
+    if (writingOpen) {
+        val settings = agentSettings
+        val accountId = vm.selected?.first?.account?.id
+        WriterSheet(
+            writing = vm.writing,
+            access = when {
+                settings == null || !settings.connected -> WriterAccess.OFF
+                accountId != null && accountId in settings.blockedAccounts -> WriterAccess.BLOCKED
+                else -> WriterAccess.READY
+            },
+            hasDraft = vm.ownText().isNotBlank(),
+            reply = args.mode == ComposeMode.REPLY || args.mode == ComposeMode.REPLY_ALL,
+            subjectBlank = vm.subject.text.isBlank(),
+            onRun = vm::write,
+            onApply = {
+                vm.applyWriting()
+                writingOpen = false
+            },
+            onOpenSettings = {
+                writingOpen = false
+                vm.dismissWriting()
+                onOpenAgentSettings()
+            },
+            onDismiss = {
+                writingOpen = false
+                vm.dismissWriting()
+            },
         )
     }
     ComposeDialogs(vm, phase, onClose, onChangeSender = { showSheet = true })
@@ -266,6 +298,7 @@ private fun ComposeTopBar(
     onSave: () -> Unit,
     onDiscard: () -> Unit,
 ) {
+    val haptics = rememberHaptics()
     var menuOpen by remember { mutableStateOf(false) }
     var scheduleOpen by remember { mutableStateOf(false) }
     var picking by rememberSaveable { mutableStateOf(false) }
@@ -291,7 +324,7 @@ private fun ComposeTopBar(
             SplitButtonLayout(
                 leadingButton = {
                     SplitButtonDefaults.LeadingButton(
-                        onClick = onSend,
+                        onClick = { haptics.confirm(); onSend() },
                         enabled = !sending,
                         modifier = Modifier.heightIn(min = 48.dp).testTag("compose_send"),
                     ) {
@@ -365,7 +398,7 @@ private fun NoAccount(onClose: () -> Unit, modifier: Modifier = Modifier) {
 
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
-private fun ComposeForm(vm: ComposeViewModel, phase: SendPhase, busy: Boolean, padding: PaddingValues, onPickSender: () -> Unit) {
+private fun ComposeForm(vm: ComposeViewModel, phase: SendPhase, busy: Boolean, padding: PaddingValues, onPickSender: () -> Unit, onWrite: () -> Unit) {
     val wide = currentWindowAdaptiveInfoV2().windowSizeClass.isWidthAtLeastBreakpoint(WindowSizeClass.WIDTH_DP_MEDIUM_LOWER_BOUND)
     val enabled = !busy
     val toFocus = remember { FocusRequester() }
@@ -501,6 +534,7 @@ private fun ComposeForm(vm: ComposeViewModel, phase: SendPhase, busy: Boolean, p
                 AttachmentChips(attachments, enabled, vm::removeAttachment)
             }
             FieldDivider()
+            WriterEntry(enabled = enabled, onClick = onWrite, modifier = Modifier.padding(top = 12.dp).testTag("compose_writer"))
             LabeledField(
                 label = stringResource(R.string.compose_label_body),
                 state = vm.body,

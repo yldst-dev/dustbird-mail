@@ -22,6 +22,8 @@
     <string name="mailbox_unread_count">읽지 않은 메일 %1$d개</string>
 
     <string name="mailbox_row_unread">읽지 않음</string>
+    <string name="mailbox_row_digest_description">에이전트 요약: %1$s</string>
+    <string name="menu_checked">선택됨</string>
     <string name="mailbox_row_attachment_description">첨부 파일 있음</string>
     <string name="mailbox_row_no_sender">(보낸 사람 없음)</string>
     <string name="mailbox_row_no_subject">(제목 없음)</string>

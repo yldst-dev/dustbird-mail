@@ -107,6 +107,25 @@ interface FolderDao {
 
 data class UnreadCount(val accountId: Long, val count: Int)
 
+private const val SEARCH_SCOPE = " m.listState != 1 AND (:accountId < 0 OR m.accountId = :accountId) AND (:role IS NULL OR f.role = :role) " +
+    "AND m.sortDate >= :since AND m.sortDate < :until AND (:unread = 0 OR m.seen = 0) AND (:starred = 0 OR m.flagged = 1) " +
+    "AND (:attachment = 0 OR m.hasAttachment = 1) "
+
+@Dao
+interface DigestDao {
+    @Query("SELECT * FROM message_digest")
+    fun observeAll(): Flow<List<MessageDigestEntity>>
+
+    @Query(
+        "SELECT m.* FROM message m JOIN folder f ON f.id = m.folderId WHERE f.role = 'INBOX' AND m.listState = 0 AND m.sortDate >= :since " +
+            "AND m.accountId NOT IN (:blocked) AND m.id NOT IN (SELECT messageRowId FROM message_digest) ORDER BY m.sortDate DESC, m.id DESC LIMIT :limit",
+    )
+    suspend fun pending(since: Long, blocked: List<Long>, limit: Int): List<MessageEntity>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertAll(rows: List<MessageDigestEntity>)
+}
+
 @Dao
 interface MessageDao {
     @Query(
@@ -129,12 +148,21 @@ interface MessageDao {
     )
     fun observeUnified(role: FolderRole, limit: Int, unreadOnly: Boolean, flaggedOnly: Boolean): Flow<List<MessageEntity>>
     @Query(
-        "SELECT * FROM message WHERE listState != 1 AND (:accountId < 0 OR accountId = :accountId) AND (" +
-            "subject LIKE :pattern ESCAPE '\\' OR fromName LIKE :pattern ESCAPE '\\' OR fromAddress LIKE :pattern ESCAPE '\\' " +
-            "OR preview LIKE :pattern ESCAPE '\\' OR toAddresses LIKE :pattern ESCAPE '\\') " +
-            "ORDER BY sortDate DESC, id DESC LIMIT :limit",
+        "SELECT m.* FROM message m JOIN folder f ON f.id = m.folderId WHERE" + SEARCH_SCOPE +
+            "AND (:anyText = 1 OR (:inSubject = 1 AND m.subject LIKE :pattern ESCAPE '\\') " +
+            "OR (:inSender = 1 AND (m.fromName LIKE :pattern ESCAPE '\\' OR m.fromAddress LIKE :pattern ESCAPE '\\')) " +
+            "OR (:inRecipient = 1 AND (m.toAddresses LIKE :pattern ESCAPE '\\' OR m.ccAddresses LIKE :pattern ESCAPE '\\')) " +
+            "OR (:inPreview = 1 AND m.preview LIKE :pattern ESCAPE '\\')) ORDER BY m.sortDate DESC, m.id DESC LIMIT :limit",
     )
-    fun search(pattern: String, accountId: Long, limit: Int): Flow<List<MessageEntity>>
+    fun search(
+        pattern: String, anyText: Boolean, inSubject: Boolean, inSender: Boolean, inRecipient: Boolean, inPreview: Boolean,
+        accountId: Long, role: FolderRole?, since: Long, until: Long, unread: Boolean, starred: Boolean, attachment: Boolean, limit: Int,
+    ): Flow<List<MessageEntity>>
+
+    @Query("SELECT m.* FROM message m JOIN folder f ON f.id = m.folderId WHERE m.id IN (:ids) AND" + SEARCH_SCOPE)
+    suspend fun filter(
+        ids: List<Long>, accountId: Long, role: FolderRole?, since: Long, until: Long, unread: Boolean, starred: Boolean, attachment: Boolean,
+    ): List<MessageEntity>
     @Query("SELECT * FROM message WHERE id IN (:ids)")
     suspend fun byIds(ids: List<Long>): List<MessageEntity>
     @Query("SELECT * FROM message ORDER BY sortDate DESC LIMIT :limit")

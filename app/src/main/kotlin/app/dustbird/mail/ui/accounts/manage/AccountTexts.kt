@@ -65,6 +65,7 @@ fun providerNameRes(providerId: String): Int = when (providerId) {
     Providers.ICLOUD.id -> R.string.accounts_service_icloud
     Providers.GMAIL.id -> R.string.accounts_service_gmail
     Providers.NAVER.id -> R.string.accounts_service_naver
+    Providers.OUTLOOK.id -> R.string.accounts_service_outlook
     else -> R.string.accounts_service_custom
 }
 

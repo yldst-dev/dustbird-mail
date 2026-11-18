@@ -124,6 +124,16 @@ object ListState {
 }
 
 @Entity(
+    tableName = "message_digest",
+    foreignKeys = [ForeignKey(MessageEntity::class, ["id"], ["messageRowId"], onDelete = ForeignKey.CASCADE)],
+)
+data class MessageDigestEntity(
+    @PrimaryKey val messageRowId: Long,
+    val text: String,
+    val createdAt: Long,
+)
+
+@Entity(
     tableName = "message_body",
     foreignKeys = [ForeignKey(MessageEntity::class, ["id"], ["messageRowId"], onDelete = ForeignKey.CASCADE)],
 )

@@ -13,7 +13,7 @@ sealed interface AssistState {
     data object Idle : AssistState
     data object Running : AssistState
     data class Done(val filled: List<Int>) : AssistState
-    data class Failed(val failure: BackendFailure) : AssistState
+    data class Failed(val failure: BackendFailure, val detail: String = "") : AssistState
 }
 
 data class AccountSuggestion(

@@ -1,5 +1,6 @@
 package app.dustbird.mail.ui.theme
 
+import app.dustbird.mail.R
 import androidx.annotation.DrawableRes
 import androidx.annotation.StringRes
 import androidx.compose.foundation.layout.PaddingValues
@@ -105,7 +106,17 @@ fun GroupTitle(text: String, modifier: Modifier = Modifier) {
 fun groupedTopAppBarColors(): TopAppBarColors =
     TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surfaceContainer)
 
-class MenuEntry(@StringRes val label: Int, @DrawableRes val icon: Int, val onClick: () -> Unit)
+class MenuEntry private constructor(
+    @StringRes val label: Int,
+    val text: String?,
+    @DrawableRes val icon: Int,
+    val checked: Boolean,
+    val onClick: () -> Unit,
+) {
+    constructor(@StringRes label: Int, @DrawableRes icon: Int, onClick: () -> Unit) : this(label, null, icon, false, onClick)
+
+    constructor(text: String, @DrawableRes icon: Int, checked: Boolean, onClick: () -> Unit) : this(0, text, icon, checked, onClick)
+}
 
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
@@ -125,9 +136,14 @@ fun FlatMenu(expanded: Boolean, onDismissRequest: () -> Unit, groups: List<List<
                             onDismissRequest()
                             entry.onClick()
                         },
-                        text = { Text(stringResource(entry.label)) },
+                        text = { Text(entry.text ?: stringResource(entry.label)) },
                         shape = MenuDefaults.itemShape(position, entries.size).shape,
                         leadingIcon = { Icon(painterResource(entry.icon), contentDescription = null) },
+                        trailingContent = if (entry.checked) {
+                            { Icon(painterResource(R.drawable.ic_check), contentDescription = stringResource(R.string.menu_checked)) }
+                        } else {
+                            null
+                        },
                     )
                 }
             }

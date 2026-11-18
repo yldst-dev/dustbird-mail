@@ -45,7 +45,7 @@ class ComposeScreenTest {
         rule.setContent {
             DustbirdTheme {
                 CompositionLocalProvider(LocalAppContainer provides fixture.container) {
-                    ComposeRoute(ComposeArgs()) { closed = true }
+                    ComposeRoute(ComposeArgs(), onClose = { closed = true })
                 }
             }
         }

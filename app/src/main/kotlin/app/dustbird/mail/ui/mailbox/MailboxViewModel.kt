@@ -243,6 +243,7 @@ class MailboxViewModel(private val container: AppContainer) : ViewModel() {
             } finally {
                 exhausted.value = emptySet()
                 refreshing.value = false
+                container.digests.refresh()
             }
         }
         return true

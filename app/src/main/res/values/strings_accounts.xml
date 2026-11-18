@@ -28,6 +28,7 @@
     <string name="accounts_service_icloud">iCloud 메일</string>
     <string name="accounts_service_gmail">Gmail</string>
     <string name="accounts_service_naver">네이버 메일</string>
+    <string name="accounts_service_outlook">Outlook 메일</string>
     <string name="accounts_service_custom">직접 설정</string>
 
     <string name="accounts_stage_imap_auth">IMAP 로그인</string>

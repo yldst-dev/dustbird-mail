@@ -19,6 +19,42 @@ class RecipientAndReplyTest {
     private fun addr(value: String, name: String? = null) = EmailAddress(value, name)
 
     @Test
+    fun ownAddressesOfAnICloudMailboxAreShownInsteadOfUnknown() {
+        val custom = identity(5, 30, "me@mydomain.example", "me", isDefault = true)
+        val own = RecipientMatcher.ownAddresses("icloud", "primary@icloud.com", listOf(custom))
+        fun to(vararg values: String) = ReceivedAddressing(values.map { addr(it) }, emptyList(), emptyList())
+        assertEquals(listOf(5L), assertIs<RecipientMatch.Matched>(RecipientMatcher.match(to("Me@MyDomain.example"), listOf(custom), own)).identityIds)
+        assertEquals(RecipientMatch.OwnAddress("shop@mydomain.example"), RecipientMatcher.match(to("shop@mydomain.example"), listOf(custom), own))
+        assertEquals(RecipientMatch.OwnAddress("primary@icloud.com"), RecipientMatcher.match(to("Primary@iCloud.com"), listOf(custom), own))
+        assertEquals(RecipientMatch.OwnAddress("random.relay@icloud.com"), RecipientMatcher.match(to("random.relay@icloud.com"), listOf(custom), own))
+        assertEquals(RecipientMatch.OwnAddress("abc@privaterelay.appleid.com"), RecipientMatcher.match(to("abc@privaterelay.appleid.com"), listOf(custom), own))
+        assertEquals(RecipientMatch.Unknown, RecipientMatcher.match(to("list@lists.example"), listOf(custom), own))
+        val delivered = ReceivedAddressing(listOf(addr("list@lists.example")), emptyList(), listOf("shop@mydomain.example"))
+        assertEquals(RecipientMatch.OwnAddress("shop@mydomain.example"), RecipientMatcher.match(delivered, listOf(custom), own))
+    }
+
+    @Test
+    fun hideMyEmailIsAnAppleMailAddressOtherThanTheLoginOnICloud() {
+        assertTrue(RecipientMatcher.isHideMyEmail("icloud", "primary@icloud.com", "Quiet.Fox42@iCloud.com"))
+        assertTrue(RecipientMatcher.isHideMyEmail("icloud", "primary@icloud.com", "old@me.com"))
+        assertFalse(RecipientMatcher.isHideMyEmail("icloud", "primary@icloud.com", "Primary@iCloud.com"))
+        assertFalse(RecipientMatcher.isHideMyEmail("icloud", "primary@icloud.com", "abc@privaterelay.appleid.com"))
+        assertFalse(RecipientMatcher.isHideMyEmail("icloud", "primary@icloud.com", "shop@mydomain.example"))
+        assertFalse(RecipientMatcher.isHideMyEmail("gmail", "me@gmail.com", "someone@icloud.com"))
+    }
+
+    @Test
+    fun onlyTheLoginAddressCountsOutsideICloud() {
+        val work = identity(6, 40, "me@company.example", "work", isDefault = true)
+        val own = RecipientMatcher.ownAddresses("custom", "login@company.example", listOf(work))
+        fun to(value: String) = ReceivedAddressing(listOf(addr(value)), emptyList(), emptyList())
+        assertEquals(RecipientMatch.OwnAddress("login@company.example"), RecipientMatcher.match(to("login@company.example"), listOf(work), own))
+        assertEquals(RecipientMatch.Unknown, RecipientMatcher.match(to("colleague@company.example"), listOf(work), own))
+        assertEquals(RecipientMatch.Unknown, RecipientMatcher.match(to("someone@icloud.com"), listOf(work), own))
+        assertEquals(RecipientMatch.Unknown, RecipientMatcher.match(to("x@company.example"), listOf(work), RecipientMatcher.ownAddresses("gmail", "not-an-address", listOf(work))))
+    }
+
+    @Test
     fun matchesToAndCcFirst() {
         val result = RecipientMatcher.match(ReceivedAddressing(listOf(addr("BIZ@example.com")), listOf(addr("me@example.com")), emptyList()), accountOne)
         assertEquals(listOf(1L, 2L), assertIs<RecipientMatch.Matched>(result).identityIds)

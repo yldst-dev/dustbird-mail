@@ -25,6 +25,8 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
@@ -41,6 +43,8 @@ import androidx.compose.material3.Icon
 
 private val ReadWeight = FontWeight(450)
 private val UnreadWeight = FontWeight(700)
+private val ReadSubjectWeight = FontWeight(500)
+private val UnreadSubjectWeight = FontWeight(650)
 
 @OptIn(ExperimentalLayoutApi::class, ExperimentalMaterial3ExpressiveApi::class)
 @Composable
@@ -63,10 +67,10 @@ fun MessageRow(
         ?: stringResource(R.string.mailbox_row_no_sender)
     val subject = message.subject.ifBlank { stringResource(R.string.mailbox_row_no_subject) }
     val matched = (message.match as? RecipientMatch.Matched)?.identityIds?.mapNotNull { identityLabels[it] }.orEmpty()
-    val identityText = when {
-        message.match is RecipientMatch.Unknown -> stringResource(R.string.mailbox_row_unknown_identity)
-        matched.isNotEmpty() -> matched.joinToString(", ")
-        else -> null
+    val identityText = when (val match = message.match) {
+        is RecipientMatch.Unknown -> stringResource(R.string.mailbox_row_unknown_identity)
+        is RecipientMatch.OwnAddress -> match.address
+        else -> matched.joinToString(", ").ifEmpty { null }
     }
     val scheme = MaterialTheme.colorScheme
     val typography = MaterialTheme.typography
@@ -156,12 +160,28 @@ fun MessageRow(
         Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
             Text(
                 text = subject,
-                style = if (unread) typography.bodyMediumEmphasized else typography.bodyMedium,
+                style = typography.bodyMedium,
+                fontWeight = if (unread) UnreadSubjectWeight else ReadSubjectWeight,
                 color = scheme.onSurface,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
-            if (message.preview.isNotBlank()) {
+            val digest = message.digest
+            if (digest != null) {
+                val digestDescription = stringResource(R.string.mailbox_row_digest_description, digest)
+                Row(
+                    modifier = Modifier.clearAndSetSemantics { contentDescription = digestDescription },
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    Icon(
+                        painterResource(R.drawable.ic_bird),
+                        contentDescription = null,
+                        tint = scheme.primary,
+                        modifier = Modifier.padding(top = 2.dp).size(16.dp),
+                    )
+                    Text(text = digest, style = typography.bodyMedium, color = scheme.onSurface, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                }
+            } else if (message.preview.isNotBlank()) {
                 Text(text = message.preview, style = typography.bodyMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
             }
             if (accountLabel != null || identityText != null) {

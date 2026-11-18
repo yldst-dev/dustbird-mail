@@ -1,5 +1,6 @@
 package app.dustbird.mail.ui.accounts
 
+import app.dustbird.mail.ui.theme.rememberHaptics
 import android.Manifest
 import android.app.Activity
 import android.content.Context
@@ -95,6 +96,7 @@ class SettingsViewModel(private val container: AppContainer) : ViewModel() {
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class, ExperimentalLayoutApi::class)
 @Composable
 fun SettingsRoute(onBack: () -> Unit, onOpenLicenses: () -> Unit) {
+    val haptics = rememberHaptics()
     val viewModel = appViewModel { SettingsViewModel(it) }
     val context = LocalContext.current
     val hideLockScreen by viewModel.hideLockScreen.collectAsStateWithLifecycle()
@@ -149,7 +151,7 @@ fun SettingsRoute(onBack: () -> Unit, onOpenLicenses: () -> Unit) {
                 }
             }
             ListItem(
-                onClick = { viewModel.setHideLockScreen(!hideLockScreen) },
+                onClick = { haptics.toggle(!hideLockScreen); viewModel.setHideLockScreen(!hideLockScreen) },
                 shapes = cardItemShapes(),
                 contentPadding = CapsulePadding,
                 modifier = Modifier.semantics {
@@ -173,7 +175,7 @@ fun SettingsRoute(onBack: () -> Unit, onOpenLicenses: () -> Unit) {
                         SettingsRepository.SEND_DELAY_CHOICES.forEach { seconds ->
                             FilterChip(
                                 selected = sendDelay == seconds,
-                                onClick = { viewModel.setSendDelay(seconds) },
+                                onClick = { haptics.tick(); viewModel.setSendDelay(seconds) },
                                 label = {
                                     Text(if (seconds == 0) stringResource(R.string.settings_send_delay_off) else stringResource(R.string.settings_send_delay_seconds, seconds))
                                 },

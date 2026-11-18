@@ -1,5 +1,6 @@
 package app.dustbird.mail.ui.agent
 
+import app.dustbird.mail.ui.theme.rememberHaptics
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
@@ -37,6 +38,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -76,12 +78,14 @@ import app.dustbird.mail.ui.theme.cardItemShapes
 import app.dustbird.mail.ui.theme.capsuleShape
 import app.dustbird.mail.ui.theme.groupedTopAppBarColors
 import app.dustbird.mail.ui.theme.pillFieldColors
+import app.dustbird.mail.ui.theme.hiddenSecret
 import kotlinx.coroutines.launch
 import androidx.core.net.toUri
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun AgentSettingsRoute(onBack: () -> Unit) {
+    val haptics = rememberHaptics()
     val container = LocalAppContainer.current
     val agent = container.agent
     val context = LocalContext.current
@@ -120,6 +124,9 @@ fun AgentSettingsRoute(onBack: () -> Unit) {
             SwitchItem(R.string.agent_auto_changes_title, stringResource(R.string.agent_auto_changes_text), settings.autoChanges) { value ->
                 scope.launch { agent.update { it.copy(autoChanges = value) } }
             }
+            SwitchItem(R.string.agent_inbox_digest_title, stringResource(R.string.agent_inbox_digest_text), settings.inboxDigest) { value ->
+                scope.launch { agent.update { it.copy(inboxDigest = value) } }
+            }
             if (accounts.size > 1) {
                 FlatCard {
                     Column(Modifier.padding(horizontal = 20.dp, vertical = 12.dp)) {
@@ -138,6 +145,7 @@ fun AgentSettingsRoute(onBack: () -> Unit) {
                                 Switch(
                                     checked = allowed,
                                     onCheckedChange = { value ->
+                                        haptics.toggle(value)
                                         scope.launch { agent.update { it.copy(blockedAccounts = if (value) it.blockedAccounts - account.id else it.blockedAccounts + account.id) } }
                                     },
                                 )
@@ -249,8 +257,9 @@ private fun Note(text: String) {
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 private fun SwitchItem(title: Int, text: String, checked: Boolean, onChange: (Boolean) -> Unit) {
+    val haptics = rememberHaptics()
     ListItem(
-        onClick = { onChange(!checked) },
+        onClick = { haptics.toggle(!checked); onChange(!checked) },
         shapes = cardItemShapes(),
         contentPadding = CapsulePadding,
         modifier = Modifier.semantics {
@@ -273,9 +282,9 @@ private fun ConnectionForm(settings: AgentSettings, agent: AgentService, login: 
     val scope = rememberCoroutineScope()
     var mode by rememberSaveable(settings.mode) { mutableStateOf(settings.mode) }
     var baseUrl by rememberSaveable(settings.baseUrl) { mutableStateOf(settings.baseUrl) }
-    var model by rememberSaveable(settings.model) { mutableStateOf(settings.model) }
     val secret = remember { TextFieldState() }
     var notice by remember { mutableStateOf<Int?>(null) }
+    var saves by remember { mutableIntStateOf(0) }
     val account = remember(login, settings.mode) { agent.chatGptAccount() }
     val hasSecret = remember(notice, settings.mode) { agent.hasSecret() }
     val modes = listOf(
@@ -353,10 +362,7 @@ private fun ConnectionForm(settings: AgentSettings, agent: AgentService, login: 
                         modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
                     )
                 }
-                FormField(R.string.agent_field_model, model, { model = it }, support = stringResource(R.string.agent_field_model_hint, AgentService.DEFAULT_MODEL))
-                if (account != null && model.trim() != settings.model) {
-                    Button(onClick = { scope.launch { agent.saveConnection(AgentMode.CHATGPT, "", model, null) } }) { Text(stringResource(R.string.agent_save_connection)) }
-                }
+                if (account != null) ModelPicker(AgentMode.CHATGPT, settings.model, agent)
             }
             AgentMode.API_KEY, AgentMode.GATEWAY -> {
                 val gateway = mode == AgentMode.GATEWAY
@@ -372,15 +378,9 @@ private fun ConnectionForm(settings: AgentSettings, agent: AgentService, login: 
                     label = { Text(stringResource(if (gateway) R.string.agent_field_token else R.string.agent_field_key)) },
                     supportingText = if (hasSecret) { { Text(stringResource(R.string.agent_field_secret_saved)) } } else null,
                     textObfuscationMode = TextObfuscationMode.Hidden,
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier.fillMaxWidth().hiddenSecret(secret.text.length),
                     shape = Pill,
                     colors = pillFieldColors(),
-                )
-                FormField(
-                    R.string.agent_field_model,
-                    model,
-                    { model = it },
-                    support = stringResource(R.string.agent_field_model_hint, if (gateway) AgentService.GATEWAY_MODEL else AgentService.DEFAULT_MODEL),
                 )
                 Button(
                     enabled = secret.text.isNotBlank() || hasSecret,
@@ -391,14 +391,16 @@ private fun ConnectionForm(settings: AgentSettings, agent: AgentService, login: 
                         } else {
                             val value = secret.text.toString()
                             scope.launch {
-                                agent.saveConnection(mode, address, model, value)
+                                agent.saveConnection(mode, address, if (settings.mode == mode) settings.model else "", value)
                                 secret.clearText()
                                 notice = R.string.agent_connection_saved
+                                saves++
                             }
                         }
                     },
                 ) { Text(stringResource(R.string.agent_save_connection)) }
                 notice?.let { Text(stringResource(it), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }) }
+                if (settings.mode == mode && hasSecret) ModelPicker(mode, settings.model, agent, refreshKey = saves)
             }
         }
     }

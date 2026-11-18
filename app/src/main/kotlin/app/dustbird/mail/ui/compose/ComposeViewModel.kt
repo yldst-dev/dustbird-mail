@@ -11,6 +11,7 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import app.dustbird.mail.agent.AgentService
 import app.dustbird.mail.AppContainer
 import app.dustbird.mail.R
 import app.dustbird.mail.core.identity.Addresses
@@ -31,6 +32,9 @@ import java.time.format.DateTimeFormatter
 import java.time.format.FormatStyle
 import java.util.Locale
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
+import app.dustbird.mail.core.agent.AgentBackendException
+import app.dustbird.mail.core.agent.BackendFailure
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
@@ -169,6 +173,9 @@ class ComposeViewModel(
     private var hasOutbox by mutableStateOf(handle.contains("outboxId"))
     var exit by mutableStateOf<ComposeExit?>(null)
         private set
+    var writing by mutableStateOf<Writing>(Writing.Idle)
+        private set
+    private var writingJob: Job? = null
     private var scheduledAt: Long? = null
 
     val phase: SendPhase
@@ -212,6 +219,66 @@ class ComposeViewModel(
         set(value) {
             handle["outboxId"] = value
         }
+
+    private var quoteAnchor: String?
+        get() = handle["quoteAnchor"]
+        set(value) {
+            handle["quoteAnchor"] = value
+        }
+
+    fun ownText(): String = selected?.let { DraftParts.split(body.text.toString(), it.second.signature, quoteAnchor).own }.orEmpty()
+
+    fun write(request: String) {
+        val identity = selected?.second ?: return
+        val text = request.trim().take(ComposeAssist.REQUEST_LIMIT)
+        if (sealed || text.isEmpty() || writing == Writing.Running) return
+        commitAll()
+        val parts = DraftParts.split(body.text.toString(), identity.signature, quoteAnchor)
+        val sender = identity.displayName.takeIf { it.isNotBlank() }?.let { "$it <${identity.address}>" } ?: identity.address
+        val payload = ComposeAssist.payload(
+            request = text,
+            mode = args.mode,
+            sender = sender,
+            recipients = (to.effective() + cc.effective()).map { it.name?.takeIf(String::isNotBlank) ?: it.address },
+            subject = subject.text.toString(),
+            own = parts.own,
+            quote = parts.quote,
+        )
+        writing = Writing.Running
+        writingJob = viewModelScope.launch {
+            writing = try {
+                val arguments = container.agent.extract(ComposeAssist.SOURCE, ComposeAssist.instructions(), payload, ComposeAssist.spec)
+                ComposeAssist.parse(arguments)?.let { Writing.Done(it, text) } ?: Writing.Failed(BackendFailure.INCOMPLETE, text)
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: AgentBackendException) {
+                Writing.Failed(error.failure, text, AgentService.describe(error))
+            } catch (error: Exception) {
+                Writing.Failed(BackendFailure.SERVER, text, AgentService.describe(error))
+            }
+        }
+    }
+
+    fun applyWriting() {
+        val done = writing as? Writing.Done ?: return
+        val identity = selected?.second ?: return
+        if (sealed) return
+        val parts = DraftParts.split(body.text.toString(), identity.signature, quoteAnchor)
+        val next = DraftParts.join(done.mail.body, parts)
+        val own = done.mail.body.trim().length
+        body.edit {
+            replace(0, length, next)
+            placeCursorBeforeCharAt(own.coerceAtMost(length))
+        }
+        if (subject.text.isBlank()) done.mail.subject?.let { subject.setTextAndPlaceCursorAtEnd(it) }
+        writing = Writing.Idle
+    }
+
+    fun dismissWriting() {
+        writingJob?.cancel()
+        writingJob = null
+        writing = Writing.Idle
+    }
 
     init {
         viewModelScope.launch {
@@ -274,7 +341,7 @@ class ComposeViewModel(
             }
             else -> null
         } ?: blank(identities, fallbackId)
-        populate(start, identities, fallbackId)
+        populate(start, container.accounts.accountsWithIdentities.first().flatMap { it.identities }, fallbackId)
         lastSaved = content()
         lastSynced = if (stored != null) lastSaved else null
         loadState = LoadState.Ready
@@ -300,13 +367,18 @@ class ComposeViewModel(
             val from = summary.fromAddress?.let { address -> if (sender == address) address else "$sender <$address>" } ?: sender
             container.mail.forwardSeed(sourceId, application.getString(R.string.compose_forward_header, from, date, summary.subject))
         } else {
-            container.mail.replySeed(sourceId, args.mode == ComposeMode.REPLY_ALL, application.getString(R.string.compose_reply_attribution, date, sender))
+            container.mail.replySeed(
+                sourceId, args.mode == ComposeMode.REPLY_ALL, application.getString(R.string.compose_reply_attribution, date, sender),
+                hiddenAddressLabel = application.getString(R.string.compose_hidden_address_label),
+            )
         }
         if (seed == null) {
             events.trySend(UiMessage(R.string.compose_source_missing))
             return null
         }
-        val identity = identities.firstOrNull { it.id == seed.identityId } ?: identities.first { it.id == fallbackId }
+        val current = container.accounts.accountsWithIdentities.first().flatMap { it.identities }.ifEmpty { identities }
+        val identity = current.firstOrNull { it.id == seed.identityId } ?: identities.first { it.id == fallbackId }
+        quoteAnchor = seed.body.lineSequence().firstOrNull { it.isNotBlank() }?.trim()
         senderConfirmed = !seed.identityNeedsConfirmation
         handle["senderConfirmed"] = senderConfirmed
         return DraftContent(

@@ -62,6 +62,19 @@ object Providers {
         verification = ProfileVerification.PREAUTH_PROBED,
     )
 
+    val OUTLOOK = ProviderProfile(
+        id = "outlook",
+        imap = ServerEndpoint("outlook.office365.com", 993, TransportSecurity.TLS),
+        smtp = ServerEndpoint("smtp-mail.outlook.com", 587, TransportSecurity.STARTTLS),
+        usernameStyle = UsernameStyle.FULL_ADDRESS,
+        authMethods = setOf(AuthMethod.OAUTH2),
+        serverSavesSentCopy = true,
+        multiFolderVisibility = false,
+        deliveryHeaders = defaultDeliveryHeaders,
+        maxConnections = 2,
+        verification = ProfileVerification.UNVERIFIED,
+    )
+
     val CUSTOM = ProviderProfile(
         id = "custom",
         imap = null,
@@ -75,12 +88,21 @@ object Providers {
         verification = ProfileVerification.UNVERIFIED,
     )
 
-    val all: List<ProviderProfile> = listOf(ICLOUD, GMAIL, NAVER, CUSTOM)
+    val all: List<ProviderProfile> = listOf(ICLOUD, GMAIL, NAVER, OUTLOOK, CUSTOM)
 
     fun byId(id: String): ProviderProfile = all.first { it.id == id }
 
-    fun usernameFor(profile: ProviderProfile, address: String): String = when (profile.usernameStyle) {
-        UsernameStyle.FULL_ADDRESS -> address
-        UsernameStyle.LOCAL_PART -> address.substringBefore('@')
+    private val appleMailDomains = setOf("icloud.com", "me.com", "mac.com")
+
+    fun isCustomICloudDomain(profile: ProviderProfile, address: String): Boolean {
+        if (profile.id != ICLOUD.id || '@' !in address) return false
+        val domain = address.substringAfterLast('@').trim().lowercase()
+        return domain.contains('.') && domain !in appleMailDomains
+    }
+
+    fun usernameFor(profile: ProviderProfile, address: String): String = when {
+        isCustomICloudDomain(profile, address) -> ""
+        profile.usernameStyle == UsernameStyle.FULL_ADDRESS -> address
+        else -> address.substringBefore('@')
     }
 }

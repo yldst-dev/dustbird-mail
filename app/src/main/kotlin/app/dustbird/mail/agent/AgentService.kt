@@ -1,5 +1,6 @@
 package app.dustbird.mail.agent
 
+import android.util.Log
 import app.dustbird.mail.core.agent.AgentBackend
 import app.dustbird.mail.core.agent.AgentBackendException
 import app.dustbird.mail.core.agent.AgentItem
@@ -38,6 +39,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
@@ -75,6 +77,8 @@ class AgentService(
     private val clock: () -> Long = System::currentTimeMillis,
     private val userAgent: String = "Dustbird",
     private val authIssuer: String = CodexAuth.ISSUER,
+    private val codexBase: String = CodexAuth.BASE_URL,
+    private val codexRelease: String = CodexAuth.LATEST_RELEASE,
 ) {
     private val backend: AgentBackend = backend ?: ResponsesBackend(::config)
     private val jobs = ConcurrentHashMap<Long, Job>()
@@ -108,10 +112,22 @@ class AgentService(
 
     suspend fun saveConnection(mode: AgentMode, baseUrl: String, model: String, secret: String?) {
         if (!secret.isNullOrBlank()) withContext(Dispatchers.IO) { secrets.put(SECRET_ID, secret.trim()) }
-        settings.updateAgent { it.copy(mode = mode, baseUrl = baseUrl.trim(), model = model.trim()) }
+        settings.setAgentModels(mode, "")
+        update { it.copy(mode = mode, baseUrl = baseUrl.trim(), model = model.trim()) }
     }
 
-    suspend fun update(transform: (AgentSettings) -> AgentSettings) = settings.updateAgent(transform)
+    suspend fun update(transform: (AgentSettings) -> AgentSettings) = settings.updateAgent { old ->
+        val next = transform(old)
+        if (next.mode != old.mode && next.model == old.model) next.copy(model = "") else next
+    }
+
+    fun models(mode: AgentMode): Flow<List<AgentModel>> = settings.agentModels(mode).map(AgentModel::fromStored)
+
+    fun automaticModel(mode: AgentMode, models: List<AgentModel>): String = when (mode) {
+        AgentMode.CHATGPT -> models.firstOrNull()?.slug ?: DEFAULT_MODEL
+        AgentMode.GATEWAY -> GATEWAY_MODEL
+        AgentMode.API_KEY, AgentMode.OFF -> DEFAULT_MODEL
+    }
 
     suspend fun ready(): Boolean = config() != null
 
@@ -127,9 +143,52 @@ class AgentService(
             AgentMode.GATEWAY ->
                 if (!safeBase(value.baseUrl)) null else secrets.get(SECRET_ID)?.let { BackendConfig(value.baseUrl, it, value.model.ifBlank { GATEWAY_MODEL }) }
             AgentMode.CHATGPT -> fresh()?.let {
-                BackendConfig(CodexAuth.BASE_URL, it.accessToken, value.model.ifBlank { DEFAULT_MODEL }, CodexAuth.headers(it, userAgent), encryptedReasoning = true)
+                val model = value.model.ifBlank { automaticModel(AgentMode.CHATGPT, models(AgentMode.CHATGPT).first()) }
+                BackendConfig(codexBase, it.accessToken, model, CodexAuth.headers(it, userAgent), encryptedReasoning = true)
             }
         }
+    }
+
+    suspend fun syncModels(mode: AgentMode): List<AgentModel> {
+        val models = try {
+            when (mode) {
+                AgentMode.OFF -> return emptyList()
+                AgentMode.CHATGPT -> {
+                    val credential = fresh() ?: throw AgentBackendException(BackendFailure.AUTH, "Not signed in to ChatGPT")
+                    val version = codexVersion()
+                    withContext(Dispatchers.IO) { CodexAuth.models(credential, userAgent, version, codexBase) }
+                }
+                AgentMode.API_KEY, AgentMode.GATEWAY -> {
+                    val value = settings.agent.first()
+                    val base = if (mode == AgentMode.API_KEY) value.baseUrl.ifBlank { OPENAI_BASE } else value.baseUrl
+                    val token = secrets.get(SECRET_ID)
+                    if (!safeBase(base) || token == null) throw AgentBackendException(BackendFailure.NOT_CONFIGURED, "The connection is not saved")
+                    withContext(Dispatchers.IO) { ModelLists.compatible(base, token, userAgent, official = base == OPENAI_BASE) }
+                }
+            }
+        } catch (_: AuthException) {
+            throw AgentBackendException(BackendFailure.AUTH, "The model list was refused")
+        } catch (_: java.io.IOException) {
+            throw AgentBackendException(BackendFailure.NETWORK, "The model list could not be loaded")
+        }
+        if (models.isEmpty()) throw AgentBackendException(BackendFailure.SERVER, "The model list was empty")
+        settings.setAgentModels(mode, AgentModel.stored(models))
+        return models
+    }
+
+    private suspend fun codexVersion(): String {
+        val latest = withContext(Dispatchers.IO) {
+            try {
+                CodexAuth.latestVersion(userAgent, codexRelease)
+            } catch (_: java.io.IOException) {
+                null
+            }
+        }
+        if (latest != null) {
+            settings.setCodexVersion(latest)
+            return latest
+        }
+        return settings.codexVersion.first().takeIf(CodexAuth::isVersion) ?: CodexAuth.FALLBACK_VERSION
     }
 
     suspend fun createSession(source: String = SOURCE_CHAT, title: String = ""): Long {
@@ -158,9 +217,11 @@ class AgentService(
             } catch (error: CancellationException) {
                 throw error
             } catch (error: AgentBackendException) {
+                report(SOURCE_CHAT, error)
                 _errors.update { it + (sessionId to AgentRunError(error.failure, error.message.orEmpty())) }
             } catch (error: Exception) {
-                _errors.update { it + (sessionId to AgentRunError(BackendFailure.SERVER, error.message.orEmpty())) }
+                report(SOURCE_CHAT, error)
+                _errors.update { it + (sessionId to AgentRunError(BackendFailure.SERVER, describe(error))) }
             } finally {
                 _partial.update { it - sessionId }
                 _running.update { it - sessionId }
@@ -170,9 +231,16 @@ class AgentService(
     }
 
     suspend fun extract(source: String, instructions: String, text: String, tool: ToolSpec): String {
-        val call = backend.respond(AgentRequest(instructions, listOf(AgentItem.User(text)), listOf(tool))) {}
-            .firstNotNullOfOrNull { item -> item.call?.takeIf { it.name == tool.name } }
-            ?: throw AgentBackendException(BackendFailure.INCOMPLETE, "The model did not call ${tool.name}")
+        val call = try {
+            backend.respond(AgentRequest(instructions, listOf(AgentItem.User(text)), listOf(tool))) {}
+                .firstNotNullOfOrNull { item -> item.call?.takeIf { it.name == tool.name } }
+                ?: throw AgentBackendException(BackendFailure.INCOMPLETE, "The model did not call ${tool.name}")
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: Exception) {
+            report(source, error)
+            throw error
+        }
         db.agent().insertLog(AgentLogEntity(at = clock(), source = source, tool = tool.name, summary = "", outcome = ToolOutcome.DONE.name, approval = "USER"))
         return call.arguments
     }
@@ -219,7 +287,8 @@ class AgentService(
         } catch (error: CancellationException) {
             throw error
         } catch (error: Exception) {
-            _errors.update { it + (sessionId to AgentRunError((error as? AgentBackendException)?.failure ?: BackendFailure.SERVER, error.message.orEmpty())) }
+            report(automation.name, error)
+            _errors.update { it + (sessionId to AgentRunError((error as? AgentBackendException)?.failure ?: BackendFailure.SERVER, describe(error))) }
         } finally {
             db.agent().markAutomationRun(automation.id, clock())
             _partial.update { it - sessionId }
@@ -331,8 +400,12 @@ class AgentService(
                     } ?: continue
                     _login.value = LoginState.Working
                     secrets.put(CHATGPT_ID, CodexAuth.exchange(grant, clock(), userAgent, authIssuer).toJson())
-                    settings.updateAgent { it.copy(mode = AgentMode.CHATGPT) }
+                    update { it.copy(mode = AgentMode.CHATGPT) }
                     _login.value = LoginState.Done
+                    try {
+                        syncModels(AgentMode.CHATGPT)
+                    } catch (_: AgentBackendException) {
+                    }
                     return@launch
                 }
             } catch (error: CancellationException) {
@@ -356,7 +429,8 @@ class AgentService(
 
     suspend fun signOut() {
         withContext(Dispatchers.IO) { secrets.delete(CHATGPT_ID) }
-        settings.updateAgent { if (it.mode == AgentMode.CHATGPT) it.copy(mode = AgentMode.OFF) else it }
+        settings.setAgentModels(AgentMode.CHATGPT, "")
+        update { if (it.mode == AgentMode.CHATGPT) it.copy(mode = AgentMode.OFF) else it }
     }
 
     private fun credential(): ChatGptCredential? = secrets.get(CHATGPT_ID)?.let(ChatGptCredential::fromJson)
@@ -375,10 +449,19 @@ class AgentService(
 
     private fun safeBase(url: String): Boolean = isSafeBase(url)
 
+    private fun report(source: String, error: Exception) {
+        val failure = (error as? AgentBackendException)?.failure?.name ?: "UNEXPECTED"
+        Log.w(LOG_TAG, "Agent request from $source failed: $failure ${describe(error)}")
+    }
+
     companion object {
+        fun describe(error: Throwable): String =
+            (if (error is AgentBackendException) error.message.orEmpty() else "${error.javaClass.simpleName}: ${error.message.orEmpty()}").take(300)
+
         fun isSafeBase(url: String): Boolean =
             url.startsWith("https://") || url.startsWith("http://127.0.0.1:") || url.startsWith("http://localhost:")
 
+        private const val LOG_TAG = "Dustbird"
         const val SECRET_ID = -1L
         const val CHATGPT_ID = -2L
         const val OPENAI_BASE = "https://api.openai.com/v1"

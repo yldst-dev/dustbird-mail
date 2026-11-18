@@ -1,5 +1,6 @@
 package app.dustbird.mail.data.repo
 
+import app.dustbird.mail.core.provider.Providers
 import app.dustbird.mail.data.AttachmentFiles
 import app.dustbird.mail.core.send.SendState
 import java.io.File
@@ -83,7 +84,7 @@ class AccountRepository(
 
     suspend fun credentialsFor(accountId: Long): Credentials? {
         val account = db.accounts().get(accountId) ?: return null
-        val secret = credentials.get(accountId) ?: return null
+        val secret = withContext(Dispatchers.IO) { credentials.get(accountId) } ?: return null
         return Credentials(account.username, secret)
     }
 
@@ -108,7 +109,7 @@ class AccountRepository(
                     smtpHost = new.smtp.host.trim(),
                     smtpPort = new.smtp.port,
                     smtpSecurity = new.smtp.security,
-                    authMethod = AuthMethod.APP_PASSWORD,
+                    authMethod = Providers.byId(new.providerId).authMethods.first(),
                     sortOrder = db.accounts().nextSortOrder(),
                     syncMode = SyncMode.PERIODIC,
                     notificationsEnabled = true,

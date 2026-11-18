@@ -1,3 +1,5 @@
+@file:OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
+
 package app.dustbird.mail.data.repo
 
 import app.dustbird.mail.core.identity.DraftSeed
@@ -10,6 +12,7 @@ import app.dustbird.mail.core.mime.AttachmentInfo
 import app.dustbird.mail.core.mime.MessageParser
 import app.dustbird.mail.core.model.EmailAddress
 import app.dustbird.mail.core.model.FolderRole
+import app.dustbird.mail.core.model.MailAccount
 import app.dustbird.mail.core.model.MailIdentity
 import app.dustbird.mail.core.net.ConnectFailure
 import app.dustbird.mail.core.net.ConnectFailures
@@ -26,6 +29,9 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.CancellationException
 import java.io.File
 import app.dustbird.mail.sync.toEntity
@@ -44,6 +50,21 @@ sealed interface MailboxScope {
 
 enum class MessageFilter { ALL, UNREAD, FLAGGED }
 
+enum class SearchField { ALL, SENDER, RECIPIENT, SUBJECT }
+
+data class SearchFilter(
+    val since: Long? = null,
+    val until: Long? = null,
+    val accountId: Long? = null,
+    val role: FolderRole? = null,
+    val unread: Boolean = false,
+    val starred: Boolean = false,
+    val attachment: Boolean = false,
+    val field: SearchField = SearchField.ALL,
+) {
+    val active: Boolean get() = this != SearchFilter()
+}
+
 data class MessageSummary(
     val id: Long,
     val accountId: Long,
@@ -58,6 +79,7 @@ data class MessageSummary(
     val flagged: Boolean = false,
     val answered: Boolean = false,
     val folderId: Long = 0,
+    val digest: String? = null,
 )
 
 data class MessageDetail(
@@ -90,7 +112,12 @@ class MailRepository(
     private val access: ImapAccess,
     private val files: AttachmentFiles,
     private val onSeenChanged: suspend (accountId: Long) -> Unit = {},
+    digestsShown: Flow<Boolean> = flowOf(false),
 ) {
+    private val digests: Flow<Map<Long, String>> = digestsShown.distinctUntilChanged().flatMapLatest { shown ->
+        if (!shown) flowOf(emptyMap()) else db.digests().observeAll().map { rows -> rows.filter { it.text.isNotBlank() }.associate { it.messageRowId to it.text } }
+    }
+
     fun messages(scope: MailboxScope, limit: Int, filter: MessageFilter = MessageFilter.ALL): Flow<List<MessageSummary>> {
         val unread = filter == MessageFilter.UNREAD
         val flagged = filter == MessageFilter.FLAGGED
@@ -99,19 +126,46 @@ class MailRepository(
             is MailboxScope.Account -> db.messages().observeByAccountAndRole(scope.accountId, scope.role, limit, unread, flagged)
             is MailboxScope.Folder -> db.messages().observeByFolder(scope.folderId, limit, unread, flagged)
         }
-        return combine(rows, accounts.identities) { list, identities -> list.map { it.toSummary(identities) } }
+        return combine(rows, addressing, digests) { list, known, digest -> list.map { it.toSummary(known, digest[it.id]) } }
     }
 
-    fun search(query: String, accountId: Long?, limit: Int = 200, serverHits: List<Long> = emptyList()): Flow<List<MessageSummary>> =
-        combine(db.messages().search(likePattern(query), accountId ?: -1, limit), accounts.identities) { list, identities ->
-            withServerHits(list, serverHits).map { it.toSummary(identities) }
+    fun search(query: String, filter: SearchFilter = SearchFilter(), limit: Int = 200, serverHits: List<Long> = emptyList()): Flow<List<MessageSummary>> =
+        combine(rows(query, filter, limit), addressing, digests) { list, known, digest ->
+            withServerHits(list, serverHits, filter).map { it.toSummary(known, digest[it.id]) }
         }
 
-    suspend fun searchRows(query: String, accountId: Long?, limit: Int, serverHits: List<Long> = emptyList()): List<MessageEntity> =
-        withServerHits(db.messages().search(likePattern(query), accountId ?: -1, limit).first(), serverHits).take(limit)
+    suspend fun searchRows(query: String, accountId: Long?, limit: Int, serverHits: List<Long> = emptyList()): List<MessageEntity> {
+        val filter = SearchFilter(accountId = accountId)
+        return withServerHits(rows(query, filter, limit).first(), serverHits, filter).take(limit)
+    }
 
-    private suspend fun withServerHits(local: List<MessageEntity>, serverHits: List<Long>): List<MessageEntity> {
-        val extra = serverHits.chunked(500).flatMap { db.messages().byIds(it) }.filter { it.listState != ListState.HIDDEN }
+    private fun rows(query: String, filter: SearchFilter, limit: Int): Flow<List<MessageEntity>> {
+        val field = filter.field
+        return db.messages().search(
+            pattern = likePattern(query),
+            anyText = query.isBlank(),
+            inSubject = field == SearchField.ALL || field == SearchField.SUBJECT,
+            inSender = field == SearchField.ALL || field == SearchField.SENDER,
+            inRecipient = field == SearchField.ALL || field == SearchField.RECIPIENT,
+            inPreview = field == SearchField.ALL,
+            accountId = filter.accountId ?: -1,
+            role = filter.role,
+            since = filter.since ?: Long.MIN_VALUE,
+            until = filter.until ?: Long.MAX_VALUE,
+            unread = filter.unread,
+            starred = filter.starred,
+            attachment = filter.attachment,
+            limit = limit,
+        )
+    }
+
+    private suspend fun withServerHits(local: List<MessageEntity>, serverHits: List<Long>, filter: SearchFilter): List<MessageEntity> {
+        val extra = serverHits.chunked(500).flatMap { ids ->
+            db.messages().filter(
+                ids, filter.accountId ?: -1, filter.role, filter.since ?: Long.MIN_VALUE, filter.until ?: Long.MAX_VALUE,
+                filter.unread, filter.starred, filter.attachment,
+            )
+        }
         return (local + extra)
             .distinctBy { it.accountId to (it.messageId ?: "row:${it.id}") }
             .sortedWith(compareByDescending<MessageEntity> { it.sortDate }.thenByDescending { it.id })
@@ -224,10 +278,10 @@ class MailRepository(
             .distinctBy { Addresses.normalize(it.address) }
     }
 
-    fun detail(id: Long): Flow<MessageDetail?> = combine(db.messages().observe(id), accounts.identities, db.folders().observeAll()) { row, identities, folders ->
+    fun detail(id: Long): Flow<MessageDetail?> = combine(db.messages().observe(id), addressing, db.folders().observeAll()) { row, known, folders ->
         row?.let { entity ->
             MessageDetail(
-                summary = entity.toSummary(identities),
+                summary = entity.toSummary(known),
                 to = Codec.parseAddresses(entity.toAddresses),
                 cc = Codec.parseAddresses(entity.ccAddresses),
                 replyTo = Codec.parseAddresses(entity.replyTo),
@@ -281,9 +335,25 @@ class MailRepository(
 
     suspend fun allowImages(id: Long) = db.messages().allowImages(id)
 
-    suspend fun replySeed(id: Long, replyAll: Boolean, attribution: String): DraftSeed? {
+    suspend fun replySeed(id: Long, replyAll: Boolean, attribution: String, hiddenAddressLabel: String? = null): DraftSeed? {
+        if (hiddenAddressLabel != null) adoptHiddenAddress(id, hiddenAddressLabel)
         val original = original(id) ?: return null
         return ReplyComposer.reply(original, accounts.identities.first(), replyAll, attribution)
+    }
+
+    private suspend fun adoptHiddenAddress(id: Long, label: String) {
+        val message = db.messages().get(id) ?: return
+        val role = db.folders().get(message.folderId)?.role
+        if (role == FolderRole.SENT || role == FolderRole.DRAFTS) return
+        val account = accounts.accounts.first().firstOrNull { it.id == message.accountId } ?: return
+        val identities = accounts.identities.first()
+        val own = identities.filter { it.accountId == account.id }
+        val address = (match(message, own, RecipientMatcher.ownAddresses(account.providerId, account.username, own)) as? RecipientMatch.OwnAddress)?.address ?: return
+        if (!RecipientMatcher.isHideMyEmail(account.providerId, account.username, address)) return
+        if (identities.any { Addresses.same(it.address, address) }) return
+        val free = generateSequence(1) { it + 1 }.map { if (it == 1) label else "$label $it" }
+            .first { candidate -> identities.none { it.label.trim().equals(candidate, ignoreCase = true) } }
+        accounts.addIdentity(account.id, IdentityInput(address, "", "", free))
     }
 
     suspend fun forwardSeed(id: Long, header: String): DraftSeed? {
@@ -313,7 +383,7 @@ class MailRepository(
         )
     }
 
-    private fun MessageEntity.toSummary(identities: List<MailIdentity>) = MessageSummary(
+    private fun MessageEntity.toSummary(known: Addressing, digest: String? = null) = MessageSummary(
         id = id,
         accountId = accountId,
         subject = subject,
@@ -323,20 +393,35 @@ class MailRepository(
         sortDate = sortDate,
         seen = seen,
         hasAttachment = hasAttachment,
-        match = match(this, identities.filter { it.accountId == accountId }),
+        match = known.match(this),
         flagged = flagged,
         answered = answered,
         folderId = folderId,
+        digest = digest,
     )
 
-    private fun match(message: MessageEntity, accountIdentities: List<MailIdentity>): RecipientMatch = RecipientMatcher.match(
+    private fun match(message: MessageEntity, accountIdentities: List<MailIdentity>, ownAddress: (String) -> Boolean = { false }): RecipientMatch = RecipientMatcher.match(
         ReceivedAddressing(
             Codec.parseAddresses(message.toAddresses),
             Codec.parseAddresses(message.ccAddresses),
             Codec.parseStrings(message.deliveryValues),
         ),
         accountIdentities,
+        ownAddress,
     )
+
+    private inner class Addressing(identities: List<MailIdentity>, accounts: List<MailAccount>, folders: List<FolderEntity>) {
+        private val byAccount = identities.groupBy { it.accountId }
+        private val own = accounts.associate { account -> account.id to RecipientMatcher.ownAddresses(account.providerId, account.username, byAccount[account.id].orEmpty()) }
+        private val outgoing = folders.filter { it.role == FolderRole.SENT || it.role == FolderRole.DRAFTS }.map { it.id }.toSet()
+
+        fun match(message: MessageEntity): RecipientMatch =
+            if (message.folderId in outgoing) RecipientMatch.NotReceived else match(message, byAccount[message.accountId].orEmpty(), own[message.accountId] ?: { false })
+    }
+
+    private val addressing: Flow<Addressing> = combine(accounts.identities, accounts.accounts, db.folders().observeAll()) { identities, list, folders ->
+        Addressing(identities, list, folders)
+    }
 }
 
 private const val MAX_CACHED_BODY_CHARS = 600_000

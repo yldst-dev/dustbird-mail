@@ -1,6 +1,7 @@
 package app.dustbird.mail.ui.compose
 
 import androidx.compose.foundation.text.input.setTextAndPlaceCursorAtEnd
+import androidx.compose.runtime.snapshots.Snapshot
 import androidx.lifecycle.SavedStateHandle
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import app.dustbird.mail.R
@@ -258,7 +259,10 @@ class ComposeViewModelTest {
     @Test
     fun autosaveStoresTheDraftAfterTypingStops() {
         val viewModel = fixture.openViewModel()
-        onMain { viewModel.subject.setTextAndPlaceCursorAtEnd("Typed subject") }
+        onMain {
+            viewModel.subject.setTextAndPlaceCursorAtEnd("Typed subject")
+            Snapshot.sendApplyNotifications()
+        }
         waitUntil(6000) { drafts().isNotEmpty() }
         assertEquals("Typed subject", drafts().single().subject)
     }

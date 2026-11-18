@@ -170,7 +170,7 @@ fun MailApp(
                     sourceMessageId = arguments.getLong("source").takeIf { it >= 0 },
                 )
             }
-            ComposeRoute(args = args, onClose = { navController.popBackStack() })
+            ComposeRoute(args = args, onClose = { navController.popBackStack() }, onOpenAgentSettings = { navController.navigate(Routes.AGENT_SETTINGS) })
         }
         composable(Routes.OUTBOX) {
             OutboxRoute(onBack = { navController.popBackStack() }, onEditDraft = { navController.navigate(Routes.compose(ComposeArgs(draftId = it))) })

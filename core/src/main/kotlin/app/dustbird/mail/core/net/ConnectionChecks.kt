@@ -19,9 +19,9 @@ object ConnectionChecks {
     }
 
     fun smtp(endpoint: ServerEndpoint, credentials: Credentials): CheckResult = try {
-        val transport = SMTPTransport(Session.getInstance(SessionConfig.smtp(endpoint)), SessionConfig.smtpUrl)
+        val transport = SMTPTransport(Session.getInstance(SessionConfig.smtp(endpoint, bearer = credentials.bearer)), SessionConfig.smtpUrl)
         try {
-            transport.connect(endpoint.host, endpoint.port, credentials.username, credentials.secret)
+            transport.connect(endpoint.host, endpoint.port, credentials.username, credentials.password)
         } finally {
             runCatching { transport.close() }
         }

@@ -1,5 +1,10 @@
 package app.dustbird.mail.ui.accounts.add
 
+import androidx.compose.foundation.text.input.TextFieldState
+import app.dustbird.mail.data.secure.MicrosoftOAuth
+import app.dustbird.mail.data.secure.MicrosoftSignIn
+import app.dustbird.mail.data.secure.OAuthToken
+import app.dustbird.mail.data.secure.SignInState
 import androidx.compose.foundation.text.input.clearText
 import androidx.compose.foundation.text.input.setTextAndPlaceCursorAtEnd
 import androidx.compose.runtime.snapshotFlow
@@ -8,6 +13,7 @@ import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import app.dustbird.mail.AppContainer
+import app.dustbird.mail.agent.AgentService
 import app.dustbird.mail.core.agent.AgentBackendException
 import app.dustbird.mail.core.agent.BackendFailure
 import app.dustbird.mail.core.model.ConnectionStages
@@ -49,6 +55,16 @@ class AddAccountViewModel(
     private val smtpCheck: (ServerEndpoint, Credentials) -> CheckResult = ConnectionChecks::smtp,
 ) : ViewModel() {
     val fields = AddAccountFields()
+    val clientId = TextFieldState()
+    private val microsoft = MicrosoftSignIn(viewModelScope) { token ->
+        container.settings.setMicrosoftClientId(token.clientId)
+        fields.password.setTextAndPlaceCursorAtEnd(token.encode())
+    }
+    val signIn: StateFlow<SignInState> = microsoft.state
+
+    fun startSignIn() = microsoft.start(clientId.text.toString())
+
+    fun cancelSignIn() = microsoft.cancel()
 
     private val _state = MutableStateFlow(AddAccountUiState())
     val state: StateFlow<AddAccountUiState> = _state.asStateFlow()
@@ -60,6 +76,7 @@ class AddAccountViewModel(
 
     init {
         restore()
+        viewModelScope.launch { clientId.setTextAndPlaceCursorAtEnd(container.settings.microsoftClientId.first().ifBlank { MicrosoftOAuth.THUNDERBIRD_CLIENT_ID }) }
         viewModelScope.launch {
             snapshotFlow { fields.address.text.trim().toString() }.collect { followAddress(it) }
         }
@@ -73,6 +90,7 @@ class AddAccountViewModel(
         if (_state.value.providerId != providerId) {
             val profile = Providers.byId(providerId)
             autoUsername = ""
+            microsoft.cancel()
             fields.reset(profile, if (profile.imap == null) "" else suggestedName)
             handle[KEY_NAME] = suggestedName
             assistJob?.cancel()
@@ -122,7 +140,7 @@ class AddAccountViewModel(
         )
         pending = new
         val secret = values.password
-        val credentials = Credentials(new.username, secret)
+        val credentials = Credentials(new.username, OAuthToken.loginSecret(secret))
         set { copy(step = AddStep.VERIFY, imap = Stage.Running, smtp = Stage.Pending, saveError = null) }
         verifyJob = viewModelScope.launch {
             val imap = withContext(Dispatchers.IO) { imapCheck(new.imap, credentials) }.scrubbed(secret)
@@ -145,9 +163,9 @@ class AddAccountViewModel(
             } catch (error: CancellationException) {
                 throw error
             } catch (error: AgentBackendException) {
-                AssistState.Failed(error.failure)
-            } catch (_: Exception) {
-                AssistState.Failed(BackendFailure.SERVER)
+                AssistState.Failed(error.failure, AgentService.describe(error))
+            } catch (error: Exception) {
+                AssistState.Failed(BackendFailure.SERVER, AgentService.describe(error))
             }
             set { copy(assist = next) }
         }

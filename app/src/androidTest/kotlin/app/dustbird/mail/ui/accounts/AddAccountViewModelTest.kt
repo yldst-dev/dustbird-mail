@@ -371,7 +371,7 @@ class AddAccountViewModelTest {
         agentReply = { throw AgentBackendException(BackendFailure.NOT_CONFIGURED, "off") }
 
         onMain { viewModel.assist("gmail user@example.com") }
-        assertEquals(AssistState.Failed(BackendFailure.NOT_CONFIGURED), viewModel.await { it.assist is AssistState.Failed }.assist)
+        assertEquals(BackendFailure.NOT_CONFIGURED, (viewModel.await { it.assist is AssistState.Failed }.assist as AssistState.Failed).failure)
         assertEquals("", viewModel.fields.values().address)
         assertEquals("imap.gmail.com", viewModel.fields.values().imapHost)
 
@@ -379,7 +379,7 @@ class AddAccountViewModelTest {
         onMain { viewModel.dismissAssist() }
         assertEquals(AssistState.Idle, viewModel.state.value.assist)
         onMain { viewModel.assist("gmail user@example.com") }
-        assertEquals(AssistState.Failed(BackendFailure.INCOMPLETE), viewModel.await { it.assist is AssistState.Failed }.assist)
+        assertEquals(BackendFailure.INCOMPLETE, (viewModel.await { it.assist is AssistState.Failed }.assist as AssistState.Failed).failure)
         assertTrue(runBlocking { db.agent().observeLog(10).first() }.isEmpty())
     }
 

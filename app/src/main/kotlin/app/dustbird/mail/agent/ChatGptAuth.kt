@@ -6,6 +6,7 @@ import java.net.HttpURLConnection
 import java.net.URL
 import java.net.URLEncoder
 import java.time.OffsetDateTime
+import org.json.JSONArray
 import org.json.JSONException
 import org.json.JSONObject
 
@@ -42,6 +43,42 @@ data class ChatGptCredential(
     }
 }
 
+data class AgentModel(val slug: String, val name: String, val description: String) {
+    companion object {
+        private const val MAX_MODELS = 100
+        private val slugPattern = Regex("[A-Za-z0-9][A-Za-z0-9._:-]{0,99}")
+        private val spaces = Regex("\\s+")
+
+        fun of(slug: String, name: String, description: String): AgentModel? {
+            val id = slug.trim()
+            if (!slugPattern.matches(id)) return null
+            return AgentModel(id, clean(name).take(60).ifBlank { id }, clean(description).take(200))
+        }
+
+        fun fromArray(json: JSONArray?): List<AgentModel> {
+            if (json == null) return emptyList()
+            return (0 until json.length()).mapNotNull { json.optJSONObject(it) }
+                .mapNotNull { of(text(it, "slug"), text(it, "display_name"), text(it, "description")) }
+                .distinctBy { it.slug }
+                .take(MAX_MODELS)
+        }
+
+        fun fromStored(text: String): List<AgentModel> = try {
+            fromArray(JSONArray(text.ifBlank { "[]" }))
+        } catch (_: JSONException) {
+            emptyList()
+        }
+
+        fun stored(models: List<AgentModel>): String = JSONArray().also { array ->
+            models.forEach { array.put(JSONObject().put("slug", it.slug).put("display_name", it.name).put("description", it.description)) }
+        }.toString()
+
+        internal fun text(json: JSONObject, key: String): String = if (json.isNull(key)) "" else json.optString(key)
+
+        private fun clean(text: String): String = text.filterNot { it.isISOControl() }.replace(spaces, " ").trim()
+    }
+}
+
 class DeviceCode(val deviceAuthId: String, val userCode: String, val intervalMillis: Long, val expiresAt: Long)
 
 class DeviceGrant(val authorizationCode: String, val codeVerifier: String)
@@ -53,8 +90,20 @@ object CodexAuth {
     const val CLIENT_ID = "app_EMoamEEZ73f0CkXaXp7hrann"
     const val BASE_URL = "https://chatgpt.com/backend-api/codex"
     const val ORIGINATOR = "dustbird"
+    const val FALLBACK_VERSION = "0.170.0"
+    const val LATEST_RELEASE = "https://api.github.com/repos/openai/codex/releases/latest"
     const val CODE_LIFETIME_MILLIS = 15L * 60 * 1000
     private const val AUTH_CLAIM = "https://api.openai.com/auth"
+    private val releaseTag = Regex("rust-v(\\d{1,4}\\.\\d{1,5}\\.\\d{1,6})")
+    private val versionPattern = Regex("\\d{1,4}\\.\\d{1,5}\\.\\d{1,6}")
+
+    fun isVersion(text: String): Boolean = versionPattern.matches(text)
+
+    fun latestVersion(userAgent: String, url: String = LATEST_RELEASE): String? {
+        val (status, json) = call(url, userAgent, MAX_RELEASE_BODY) { it.requestMethod = "GET" }
+        if (status !in 200..299 || json.optBoolean("prerelease") || json.optBoolean("draft")) return null
+        return releaseTag.matchEntire(AgentModel.text(json, "tag_name").trim())?.groupValues?.get(1)
+    }
 
     fun verificationUrl(issuer: String = ISSUER): String = "$issuer/codex/device"
 
@@ -110,6 +159,26 @@ object CodexAuth {
         return credentialOf(json, now, previous = credential)
     }
 
+    fun models(credential: ChatGptCredential, userAgent: String, clientVersion: String, baseUrl: String = BASE_URL): List<AgentModel> {
+        require(isVersion(clientVersion)) { "Not a Codex version" }
+        val (status, json) = call("$baseUrl/models?client_version=$clientVersion", userAgent, MAX_MODELS_BODY) { connection ->
+            connection.requestMethod = "GET"
+            connection.setRequestProperty("Authorization", "Bearer ${credential.accessToken}")
+            headers(credential, userAgent).forEach(connection::setRequestProperty)
+        }
+        if (status == 401 || status == 403) throw AuthException(errorCode(json, status))
+        if (status !in 200..299) throw IOException("The model list could not be loaded: HTTP $status")
+        return modelsOf(json)
+    }
+
+    internal fun modelsOf(json: JSONObject): List<AgentModel> {
+        val list = json.optJSONArray("models") ?: return emptyList()
+        val shown = (0 until list.length()).mapNotNull { list.optJSONObject(it) }
+            .filter { AgentModel.text(it, "visibility") == "list" }
+            .sortedBy { it.optInt("priority", Int.MAX_VALUE) }
+        return AgentModel.fromArray(JSONArray(shown))
+    }
+
     fun headers(credential: ChatGptCredential, userAgent: String): Map<String, String> = buildMap {
         put("originator", ORIGINATOR)
         put("User-Agent", userAgent)
@@ -142,31 +211,36 @@ object CodexAuth {
         null
     }
 
-    private fun errorCode(json: JSONObject, status: Int): String {
+    internal fun errorCode(json: JSONObject, status: Int): String {
         val error = json.opt("error")
         val code = if (error is JSONObject) error.optString("code") else error?.toString().orEmpty()
         return code.ifBlank { "http_$status" }
     }
 
-    private fun post(url: String, body: String, contentType: String, userAgent: String): Pair<Int, JSONObject> {
+    private fun post(url: String, body: String, contentType: String, userAgent: String): Pair<Int, JSONObject> =
+        call(url, userAgent, MAX_BODY) { connection ->
+            connection.requestMethod = "POST"
+            connection.doOutput = true
+            connection.setRequestProperty("Content-Type", contentType)
+            connection.outputStream.use { it.write(body.toByteArray(Charsets.UTF_8)) }
+        }
+
+    internal fun call(url: String, userAgent: String, limit: Int, send: (HttpURLConnection) -> Unit): Pair<Int, JSONObject> {
         val connection = URL(url).openConnection() as HttpURLConnection
         try {
-            connection.requestMethod = "POST"
             connection.connectTimeout = 20_000
             connection.readTimeout = 30_000
             connection.instanceFollowRedirects = false
-            connection.doOutput = true
-            connection.setRequestProperty("Content-Type", contentType)
             connection.setRequestProperty("Accept", "application/json")
             connection.setRequestProperty("originator", ORIGINATOR)
             connection.setRequestProperty("User-Agent", userAgent)
-            connection.outputStream.use { it.write(body.toByteArray(Charsets.UTF_8)) }
+            send(connection)
             val status = connection.responseCode
             val stream = if (status in 200..299) connection.inputStream else connection.errorStream
             val text = stream?.bufferedReader(Charsets.UTF_8)?.use { reader ->
                 val buffer = CharArray(8192)
                 val collected = StringBuilder()
-                while (collected.length < MAX_BODY) {
+                while (collected.length < limit) {
                     val count = reader.read(buffer)
                     if (count < 0) break
                     collected.append(buffer, 0, count)
@@ -190,4 +264,6 @@ object CodexAuth {
     private const val JSON = "application/json"
     private const val FORM = "application/x-www-form-urlencoded"
     private const val MAX_BODY = 256 * 1024
+    private const val MAX_MODELS_BODY = 4 * 1024 * 1024
+    private const val MAX_RELEASE_BODY = 1024 * 1024
 }

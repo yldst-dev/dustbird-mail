@@ -37,9 +37,9 @@ import javax.mail.search.HeaderTerm
 
 object JakartaImapConnector : ImapConnector {
     override fun connect(endpoint: ServerEndpoint, credentials: Credentials): ImapSession {
-        val session = Session.getInstance(SessionConfig.imap(endpoint))
+        val session = Session.getInstance(SessionConfig.imap(endpoint, credentials.bearer))
         val store = session.getStore("imap") as IMAPStore
-        store.connect(endpoint.host, endpoint.port, credentials.username, credentials.secret)
+        store.connect(endpoint.host, endpoint.port, credentials.username, credentials.password)
         return JakartaImapSession(store)
     }
 }
