@@ -21,6 +21,7 @@ import app.dustbird.mail.data.db.MessageEntity
 import app.dustbird.mail.data.secure.CredentialStore
 import app.dustbird.mail.ui.nav.ComposeArgs
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.runBlocking
 
 internal class FakeCredentialStore : CredentialStore {
@@ -48,13 +49,20 @@ internal class ComposeFixture {
     val db: MailDatabase = Room.inMemoryDatabaseBuilder(context, MailDatabase::class.java).build()
     val container = AppContainer(context, credentials = FakeCredentialStore(), db = db)
     private var previousDefault: Long? = null
+    private var previousDelay = 0
 
     fun open() = runBlocking {
         previousDefault = container.accounts.appDefaultIdentityId.first()
+        previousDelay = container.settings.sendDelaySeconds.first()
+        container.settings.setSendDelaySeconds(0)
     }
 
     fun close() {
-        runBlocking { container.accounts.setAppDefaultIdentity(previousDefault) }
+        runBlocking {
+            container.accounts.setAppDefaultIdentity(previousDefault)
+            container.settings.setSendDelaySeconds(previousDelay)
+        }
+        container.scope.cancel()
         db.close()
     }
 

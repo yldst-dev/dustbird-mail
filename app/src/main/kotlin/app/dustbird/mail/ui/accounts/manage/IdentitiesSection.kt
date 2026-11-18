@@ -30,7 +30,6 @@ import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import app.dustbird.mail.R
@@ -45,6 +44,7 @@ import app.dustbird.mail.core.send.SendState
 import app.dustbird.mail.data.repo.IdentityInput
 import app.dustbird.mail.data.repo.IdentityResult
 import app.dustbird.mail.ui.LocalAppContainer
+import app.dustbird.mail.ui.theme.capsuleShape
 import kotlinx.coroutines.launch
 
 private const val NEW_IDENTITY = 0L
@@ -97,7 +97,7 @@ fun IdentitiesSection(
         }
         OutlinedButton(onClick = { editing = NEW_IDENTITY }) { Text(stringResource(R.string.accounts_identity_add)) }
         Column(Modifier.semantics { liveRegion = LiveRegionMode.Polite }, verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            note?.let { Text(it, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold) }
+            note?.let { Text(it, style = MaterialTheme.typography.bodyMediumEmphasized) }
             TestSendStatus(testSend)
         }
     }
@@ -170,18 +170,17 @@ private fun IdentityRow(
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             AccentLabel(identity.label, accentIndex)
-            Text(identity.address, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            Text(identity.address, style = MaterialTheme.typography.titleMediumEmphasized)
             if (identity.displayName.isNotBlank()) {
                 Text(stringResource(R.string.accounts_identity_name_line, identity.displayName), style = MaterialTheme.typography.bodyMedium)
             }
             Text(
                 stringResource(R.string.accounts_identity_verification, stringResource(identity.verification.labelRes())),
-                style = MaterialTheme.typography.bodyMedium,
-                fontWeight = if (identity.verification == SendVerification.UNVERIFIED) FontWeight.Normal else FontWeight.Bold,
+                style = if (identity.verification == SendVerification.UNVERIFIED) MaterialTheme.typography.bodyMedium else MaterialTheme.typography.bodyMediumEmphasized,
                 color = if (identity.verification == SendVerification.FAILED) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
             )
-            if (identity.isAccountDefault) Text(stringResource(R.string.accounts_identity_account_default), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
-            if (isAppDefault) Text(stringResource(R.string.accounts_identity_app_default), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
+            if (identity.isAccountDefault) Text(stringResource(R.string.accounts_identity_account_default), style = MaterialTheme.typography.bodyMediumEmphasized, color = MaterialTheme.colorScheme.primary)
+            if (isAppDefault) Text(stringResource(R.string.accounts_identity_app_default), style = MaterialTheme.typography.bodyMediumEmphasized, color = MaterialTheme.colorScheme.primary)
             FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                 IdentityAction(identity.label, R.string.accounts_identity_edit, onClick = onEdit)
                 IdentityAction(identity.label, R.string.accounts_identity_test, enabled = !testRunning, onClick = onTest)
@@ -209,7 +208,7 @@ private fun IdentityAction(label: String, text: Int, onClick: () -> Unit, enable
         enabled = enabled,
         modifier = Modifier.semantics { contentDescription = description },
         colors = if (destructive) ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error) else ButtonDefaults.textButtonColors(),
-    ) { Text(stringResource(text), fontWeight = if (destructive) FontWeight.Bold else null) }
+    ) { Text(stringResource(text)) }
 }
 
 @Composable
@@ -217,9 +216,9 @@ private fun TestSendStatus(testSend: TestSend) {
     when (testSend) {
         TestSend.Idle -> Unit
         TestSend.Running -> Waiting(R.string.accounts_test_running)
-        TestSend.Error -> Text(stringResource(R.string.accounts_test_error), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error, fontWeight = FontWeight.Bold)
+        TestSend.Error -> Text(stringResource(R.string.accounts_test_error), style = MaterialTheme.typography.bodyMediumEmphasized, color = MaterialTheme.colorScheme.error)
         is TestSend.Result -> {
-            Text(stringResource(testResultRes(testSend), testSend.label), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
+            Text(stringResource(testResultRes(testSend), testSend.label), style = MaterialTheme.typography.bodyMediumEmphasized)
             Text(stringResource(R.string.accounts_test_headers), style = MaterialTheme.typography.bodyMedium)
         }
     }
@@ -252,6 +251,8 @@ private fun IdentityEditor(accountId: Long, editing: MailIdentity?, onDismiss: (
     var saving by remember { mutableStateOf(false) }
 
     AlertDialog(
+
+        shape = capsuleShape(),
         onDismissRequest = onDismiss,
         title = { Text(stringResource(if (editing == null) R.string.accounts_identity_add_title else R.string.accounts_identity_edit_title)) },
         text = {
@@ -270,8 +271,8 @@ private fun IdentityEditor(accountId: Long, editing: MailIdentity?, onDismiss: (
                     Text(
                         stringResource(it.messageRes()),
                         Modifier.fillMaxWidth().semantics { liveRegion = LiveRegionMode.Assertive },
+                        style = MaterialTheme.typography.bodyLargeEmphasized,
                         color = MaterialTheme.colorScheme.error,
-                        fontWeight = FontWeight.Bold,
                     )
                 }
             }

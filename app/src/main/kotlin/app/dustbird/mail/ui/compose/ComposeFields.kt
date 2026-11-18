@@ -20,15 +20,11 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.selection.selectable
-import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.shape.ZeroCornerSize
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.text.input.TextFieldLineLimits
 import androidx.compose.foundation.text.input.TextFieldState
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowDropDown
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Info
-import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -39,7 +35,6 @@ import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.key
 import androidx.compose.runtime.remember
@@ -55,11 +50,12 @@ import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
@@ -71,7 +67,11 @@ import app.dustbird.mail.core.model.MailAccount
 import app.dustbird.mail.core.model.MailIdentity
 import app.dustbird.mail.core.model.SendVerification
 import app.dustbird.mail.data.repo.AccountWithIdentities
+import app.dustbird.mail.ui.theme.Pill
 import app.dustbird.mail.ui.theme.accountAccent
+import app.dustbird.mail.data.db.DraftAttachmentEntity
+import androidx.compose.ui.platform.LocalContext
+import android.text.format.Formatter
 
 @StringRes
 internal fun verificationRes(state: SendVerification): Int = when (state) {
@@ -88,9 +88,9 @@ internal fun AccountTag(account: MailAccount, index: Int, modifier: Modifier = M
     val accent = accountAccent(index)
     Text(
         text = accountCaption(account),
-        style = MaterialTheme.typography.labelMedium,
+        style = MaterialTheme.typography.labelMediumEmphasized,
         color = accent.content,
-        modifier = modifier.background(accent.container, RoundedCornerShape(6.dp)).padding(horizontal = 8.dp, vertical = 2.dp),
+        modifier = modifier.background(accent.container, Pill).padding(horizontal = 8.dp, vertical = 2.dp),
     )
 }
 
@@ -99,7 +99,7 @@ internal fun HintRow(text: String, modifier: Modifier = Modifier, warning: Boole
     Column(modifier.fillMaxWidth().padding(bottom = 8.dp)) {
         Row(verticalAlignment = Alignment.Top) {
             Icon(
-                imageVector = if (warning) Icons.Filled.Warning else Icons.Filled.Info,
+                painter = painterResource(if (warning) R.drawable.ic_warning else R.drawable.ic_info),
                 contentDescription = null,
                 tint = if (warning) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(top = 2.dp).size(18.dp),
@@ -136,7 +136,7 @@ internal fun SenderRow(
     ) {
         Column(Modifier.weight(1f)) {
             Text(stringResource(R.string.compose_label_sender), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Text(identity.label, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+            Text(identity.label, style = MaterialTheme.typography.titleMediumEmphasized)
             Text(identity.address, style = MaterialTheme.typography.bodyMedium)
             Text(
                 stringResource(R.string.compose_verification_format, stringResource(verificationRes(identity.verification))),
@@ -145,7 +145,7 @@ internal fun SenderRow(
             )
             if (showAccount) AccountTag(account, accountIndex, Modifier.padding(top = 4.dp))
         }
-        Icon(Icons.Filled.ArrowDropDown, contentDescription = null)
+        Icon(painterResource(R.drawable.ic_arrow_drop_down), contentDescription = null)
     }
 }
 
@@ -153,7 +153,10 @@ internal fun SenderRow(
 @Composable
 internal fun SenderSheet(groups: List<AccountWithIdentities>, selectedId: Long?, onSelect: (Long) -> Unit, onDismiss: () -> Unit) {
     val showAccounts = groups.size > 1
-    ModalBottomSheet(onDismissRequest = onDismiss) {
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        shape = MaterialTheme.shapes.extraExtraLarge.copy(bottomStart = ZeroCornerSize, bottomEnd = ZeroCornerSize),
+    ) {
         LazyColumn(contentPadding = PaddingValues(bottom = 24.dp)) {
             item(key = "title") {
                 Text(
@@ -198,13 +201,12 @@ private fun IdentityRow(identity: MailIdentity, selected: Boolean, onClick: () -
         Column(Modifier.weight(1f)) {
             Text(
                 identity.label,
-                style = MaterialTheme.typography.bodyLarge,
-                fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
+                style = if (selected) MaterialTheme.typography.bodyLargeEmphasized else MaterialTheme.typography.bodyLarge,
             )
             Text(identity.address, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Row(verticalAlignment = Alignment.CenterVertically) {
                 if (identity.verification == SendVerification.FAILED) {
-                    Icon(Icons.Filled.Warning, contentDescription = null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(14.dp))
+                    Icon(painterResource(R.drawable.ic_warning), contentDescription = null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(14.dp))
                     Spacer(Modifier.width(4.dp))
                 }
                 Text(
@@ -229,6 +231,8 @@ internal fun RecipientRow(
     hidden: Boolean = false,
     emptyError: Boolean = false,
     focusRequester: FocusRequester = remember { FocusRequester() },
+    suggestions: List<EmailAddress> = emptyList(),
+    onPick: (EmailAddress) -> Unit = {},
 ) {
     val hasInvalid = field.chips.any { !RecipientInput.isValid(it) }
     val errorText = when {
@@ -291,9 +295,30 @@ internal fun RecipientRow(
                 )
             }
         }
+        if (suggestions.isNotEmpty()) {
+            FlowRow(Modifier.padding(top = 4.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                suggestions.forEach { suggestion ->
+                    val description = stringResource(R.string.compose_suggestion_add, suggestion.address)
+                    Surface(
+                        onClick = { onPick(suggestion) },
+                        enabled = enabled,
+                        shape = Pill,
+                        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                        modifier = Modifier.semantics { contentDescription = description },
+                    ) {
+                        Column(Modifier.heightIn(min = 48.dp).padding(horizontal = 16.dp, vertical = 6.dp), verticalArrangement = Arrangement.Center) {
+                            Text(suggestion.name ?: suggestion.address, style = MaterialTheme.typography.labelLarge, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.widthIn(max = 220.dp))
+                            if (suggestion.name != null) {
+                                Text(suggestion.address, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.widthIn(max = 220.dp))
+                            }
+                        }
+                    }
+                }
+            }
+        }
         if (errorText != null) {
             Row(Modifier.padding(top = 4.dp), verticalAlignment = Alignment.Top) {
-                Icon(Icons.Filled.Warning, contentDescription = null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.padding(top = 2.dp).size(16.dp))
+                Icon(painterResource(R.drawable.ic_warning), contentDescription = null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.padding(top = 2.dp).size(16.dp))
                 Spacer(Modifier.width(6.dp))
                 Text(errorText, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
             }
@@ -317,7 +342,7 @@ private fun RecipientChip(address: EmailAddress, hidden: Boolean, enabled: Boole
     }
     val text = address.name ?: address.address
     val description = if (valid) address.address else stringResource(R.string.compose_chip_invalid, address.address)
-    Surface(shape = RoundedCornerShape(12.dp), color = container, contentColor = content) {
+    Surface(shape = Pill, color = container, contentColor = content) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Row(
                 Modifier
@@ -328,13 +353,44 @@ private fun RecipientChip(address: EmailAddress, hidden: Boolean, enabled: Boole
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 if (!valid) {
-                    Icon(Icons.Filled.Warning, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Icon(painterResource(R.drawable.ic_warning), contentDescription = null, modifier = Modifier.size(16.dp))
                     Spacer(Modifier.width(4.dp))
                 }
                 Text(text, style = MaterialTheme.typography.labelLarge, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.widthIn(max = 220.dp))
             }
             IconButton(onClick = onRemove, enabled = enabled) {
-                Icon(Icons.Filled.Close, contentDescription = stringResource(R.string.compose_chip_remove, address.address), modifier = Modifier.size(18.dp))
+                Icon(painterResource(R.drawable.ic_close), contentDescription = stringResource(R.string.compose_chip_remove, address.address), modifier = Modifier.size(18.dp))
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+internal fun AttachmentChips(attachments: List<DraftAttachmentEntity>, enabled: Boolean, onRemove: (Long) -> Unit) {
+    val context = LocalContext.current
+    Column(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(stringResource(R.string.compose_attachments_label), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            attachments.forEach { attachment ->
+                Surface(shape = Pill, color = MaterialTheme.colorScheme.surfaceContainerHigh) {
+                    Row(Modifier.heightIn(min = 48.dp).padding(start = 16.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Text(attachment.fileName, style = MaterialTheme.typography.labelLarge, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.widthIn(max = 180.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Text(
+                            Formatter.formatShortFileSize(context, attachment.size),
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        IconButton(onClick = { onRemove(attachment.id) }, enabled = enabled) {
+                            Icon(
+                                painterResource(R.drawable.ic_close),
+                                contentDescription = stringResource(R.string.compose_attachment_remove, attachment.fileName),
+                                modifier = Modifier.size(18.dp),
+                            )
+                        }
+                    }
+                }
             }
         }
     }

@@ -11,13 +11,12 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.font.FontWeight
 import app.dustbird.mail.R
 import app.dustbird.mail.core.model.MailAccount
 import app.dustbird.mail.ui.LocalAppContainer
@@ -40,7 +39,7 @@ fun DataSection(account: MailAccount, removal: Removal, onRemove: (Boolean) -> U
             onClick = { confirmDelete = true },
             enabled = removal != Removal.Working,
             colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error, contentColor = MaterialTheme.colorScheme.onError),
-        ) { Text(stringResource(R.string.accounts_delete), fontWeight = FontWeight.Bold) }
+        ) { Text(stringResource(R.string.accounts_delete)) }
         if (removal == Removal.Working) Waiting(R.string.accounts_deleting)
     }
 

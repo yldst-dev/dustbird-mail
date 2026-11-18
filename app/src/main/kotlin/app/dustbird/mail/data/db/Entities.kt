@@ -1,5 +1,6 @@
 package app.dustbird.mail.data.db
 
+import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.ForeignKey
 import androidx.room.Index
@@ -113,7 +114,14 @@ data class MessageEntity(
     val answered: Boolean,
     val flagged: Boolean,
     val allowRemoteImages: Boolean,
+    @ColumnInfo(defaultValue = "0") val listState: Int = ListState.NORMAL,
 )
+
+object ListState {
+    const val NORMAL = 0
+    const val HIDDEN = 1
+    const val SEARCH_ONLY = 2
+}
 
 @Entity(
     tableName = "message_body",
@@ -168,6 +176,23 @@ data class OutboxEntity(
     val recipients: String,
     val createdAt: Long,
     val updatedAt: Long,
+    val rawPath: String? = null,
+    @ColumnInfo(defaultValue = "0") val sendAfter: Long = 0,
+    val draftId: Long? = null,
+)
+
+@Entity(
+    tableName = "draft_attachment",
+    foreignKeys = [ForeignKey(DraftEntity::class, ["id"], ["draftId"], onDelete = ForeignKey.CASCADE)],
+    indices = [Index("draftId")],
+)
+data class DraftAttachmentEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val draftId: Long,
+    val fileName: String,
+    val mimeType: String,
+    val size: Long,
+    val path: String,
 )
 
 @Entity(
@@ -193,4 +218,61 @@ data class NotifiedEntity(
     val accountId: Long,
     val dedupKey: String,
     val notifiedAt: Long,
+)
+
+@Entity(tableName = "agent_session")
+data class AgentSessionEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val title: String,
+    val source: String,
+    val createdAt: Long,
+    val updatedAt: Long,
+)
+
+@Entity(
+    tableName = "agent_item",
+    foreignKeys = [ForeignKey(AgentSessionEntity::class, ["id"], ["sessionId"], onDelete = ForeignKey.CASCADE)],
+    indices = [Index("sessionId")],
+)
+data class AgentItemEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val sessionId: Long,
+    val kind: String,
+    val raw: String?,
+    val text: String?,
+    val callId: String?,
+    val toolName: String?,
+    val arguments: String?,
+    val output: String?,
+    val createdAt: Long,
+)
+
+@Entity(tableName = "agent_memory")
+data class AgentMemoryEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val text: String,
+    val createdAt: Long,
+)
+
+@Entity(tableName = "agent_automation")
+data class AgentAutomationEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val name: String,
+    val instruction: String,
+    val trigger: String,
+    val hour: Int,
+    val allowChanges: Boolean,
+    val enabled: Boolean,
+    val lastRunAt: Long,
+)
+
+@Entity(tableName = "agent_log", indices = [Index("at")])
+data class AgentLogEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val at: Long,
+    val source: String,
+    val tool: String,
+    val summary: String,
+    val outcome: String,
+    val approval: String,
 )

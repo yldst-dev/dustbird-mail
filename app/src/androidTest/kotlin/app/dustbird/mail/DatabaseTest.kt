@@ -68,7 +68,7 @@ class DatabaseTest {
         db.identities().insert(identity(accountId, "$key@example.test", key))
         val folderId = db.folders().insert(folder(accountId))
         db.messages().upsert(message(accountId, folderId, 1))
-        db.drafts().upsert(DraftEntity(accountId = accountId, identityId = 1, toAddresses = "", ccAddresses = "", bccAddresses = "", subject = "", body = "", inReplyTo = null, references = "", messageId = "<d@x>", serverCopyAccountId = null, updatedAt = 0))
+        db.drafts().insert(DraftEntity(accountId = accountId, identityId = 1, toAddresses = "", ccAddresses = "", bccAddresses = "", subject = "", body = "", inReplyTo = null, references = "", messageId = "<d@x>", serverCopyAccountId = null, updatedAt = 0))
         db.outbox().insert(OutboxEntity(accountId = accountId, identityId = 1, state = SendState.QUEUED, attempts = 0, failure = null, messageId = "<o$key@x>", subject = "", recipientSummary = "", raw = byteArrayOf(), rawWithBcc = byteArrayOf(), envelopeFrom = "", recipients = "", createdAt = 0, updatedAt = 0))
         return accountId
     }
@@ -88,7 +88,7 @@ class DatabaseTest {
         assertEquals(1, db.folders().forAccount(second).size)
         assertEquals(1, db.outbox().byAccountAndStates(second, SendState.entries).size)
         assertEquals(1, db.drafts().countForAccount(second))
-        assertEquals(1, db.messages().observeUnified(FolderRole.INBOX, 10).first().size)
+        assertEquals(1, db.messages().observeUnified(FolderRole.INBOX, 10, false, false).first().size)
     }
 
     @Test
@@ -109,7 +109,7 @@ class DatabaseTest {
         val folderB = db.folders().insert(folder(b))
         db.messages().upsert(message(a, folderA, 1).copy(messageId = "<same@x>"))
         db.messages().upsert(message(b, folderB, 1).copy(messageId = "<same@x>"))
-        assertEquals(2, db.messages().observeUnified(FolderRole.INBOX, 10).first().size)
+        assertEquals(2, db.messages().observeUnified(FolderRole.INBOX, 10, false, false).first().size)
     }
 
     @Test
@@ -119,6 +119,6 @@ class DatabaseTest {
         val spam = db.folders().insert(folder(a).copy(path = "Other", role = FolderRole.INBOX))
         db.messages().upsert(message(a, inbox, 1).copy(messageId = "<same@x>"))
         db.messages().upsert(message(a, spam, 7).copy(messageId = "<same@x>"))
-        assertEquals(1, db.messages().observeUnified(FolderRole.INBOX, 10).first().size)
+        assertEquals(1, db.messages().observeUnified(FolderRole.INBOX, 10, false, false).first().size)
     }
 }

@@ -22,7 +22,6 @@
     <string name="mailbox_unread_count">읽지 않은 메일 %1$d개</string>
 
     <string name="mailbox_row_unread">읽지 않음</string>
-    <string name="mailbox_row_attachment">첨부</string>
     <string name="mailbox_row_attachment_description">첨부 파일 있음</string>
     <string name="mailbox_row_no_sender">(보낸 사람 없음)</string>
     <string name="mailbox_row_no_subject">(제목 없음)</string>
@@ -62,6 +61,45 @@
     <string name="mailbox_problem_disabled">메일 서버에서 IMAP 사용이 꺼져 있습니다</string>
     <string name="mailbox_problem_other">알 수 없는 문제가 생겼습니다</string>
 
+    <string name="mailbox_action_search">메일 검색</string>
+    <string name="mailbox_action_agent">에이전트</string>
+    <string name="mailbox_filter_all">전체</string>
+    <string name="mailbox_filter_unread">안 읽음</string>
+    <string name="mailbox_filter_starred">별표</string>
+    <string name="mailbox_account_collapse">폴더 접기</string>
+    <string name="mailbox_account_expand">폴더 펼치기</string>
+    <string name="mailbox_folders_other">다른 폴더</string>
+    <string name="mailbox_selection_count">%1$d개 선택</string>
+    <string name="mailbox_selection_close">선택 해제</string>
+    <string name="mailbox_action_archive">보관</string>
+    <string name="mailbox_action_delete">삭제</string>
+    <string name="mailbox_action_mark_read">읽음으로 표시</string>
+    <string name="mailbox_action_mark_unread">읽지 않음으로 표시</string>
+    <string name="mailbox_action_star">별표</string>
+    <string name="mailbox_action_unstar">별표 해제</string>
+    <string name="mailbox_action_move">폴더로 이동</string>
+    <string name="mailbox_action_spam">스팸으로 신고</string>
+    <string name="mailbox_action_not_spam">스팸 아님</string>
+    <string name="mailbox_action_select_all">전체 선택</string>
+    <string name="mailbox_row_starred">별표</string>
+    <string name="mailbox_row_answered">답장함</string>
+    <string name="mailbox_row_selected">선택됨</string>
+    <string name="mailbox_moved_archive">메일 %1$d개를 보관했습니다</string>
+    <string name="mailbox_moved_trash">메일 %1$d개를 휴지통으로 옮겼습니다</string>
+    <string name="mailbox_moved_deleted">메일 %1$d개를 삭제했습니다</string>
+    <string name="mailbox_moved_spam">메일 %1$d개를 스팸으로 옮겼습니다</string>
+    <string name="mailbox_moved_folder">메일 %1$d개를 옮겼습니다</string>
+    <string name="mailbox_undo">실행 취소</string>
+    <string name="mailbox_move_unavailable">이 계정에는 옮길 폴더가 없어 처리하지 못했습니다.</string>
+    <string name="mailbox_move_failed">메일 %1$d개를 옮기지 못했습니다. 연결을 확인한 뒤 다시 시도해 주세요.</string>
+    <string name="mailbox_star_failed">별표를 바꾸지 못했습니다. 연결을 확인한 뒤 다시 시도해 주세요.</string>
+    <string name="mailbox_delete_forever_title">완전히 삭제할까요?</string>
+    <string name="mailbox_delete_forever_body">휴지통에 있는 메일과 휴지통 폴더가 없는 계정의 메일은 바로 지워지며 되돌릴 수 없습니다.</string>
+    <string name="mailbox_delete_forever_ok">완전히 삭제</string>
+    <string name="mailbox_cancel">취소</string>
+    <string name="mailbox_move_title">옮길 폴더</string>
+    <string name="mailbox_move_mixed">여러 계정의 메일은 한 번에 다른 폴더로 옮길 수 없습니다.</string>
+
     <string name="outbox_title">보낼 편지함</string>
     <string name="outbox_back">뒤로</string>
     <string name="outbox_loading">불러오는 중입니다</string>
@@ -91,6 +129,7 @@
     <string name="outbox_detail_failed_server_code">메일 서버가 메일을 받아 주지 않았습니다(오류 코드 %1$s). 잠시 뒤 다시 시도해 보세요. 계속 안 되면 메일 서비스의 안내를 확인해 주세요.</string>
     <string name="outbox_detail_failed_network">네트워크 연결이 끊겨서 보내지 못했습니다. 연결을 확인한 뒤 다시 시도해 주세요.</string>
     <string name="outbox_detail_failed_other">알 수 없는 문제로 보내지 못했습니다. 다시 시도해 보세요.</string>
+    <string name="outbox_detail_failed_compose">메일을 만드는 중에 문제가 생겨 보내지 못했습니다. 취소하고 고치기를 눌러 받는 사람 이름과 첨부 파일을 확인해 주세요.</string>
 
     <string name="outbox_status_unknown">보냈는지 확인되지 않음</string>
     <string name="outbox_detail_unknown">보내는 도중 연결이 끊겨서 서버가 이 메일을 받았는지 알 수 없습니다. 앱은 같은 메일을 자동으로 다시 보내지 않습니다. 먼저 보낸 편지함에서 확인해 보세요. 이미 보낸 것이 맞다면 보낸 것으로 처리하고, 보내지 않은 것이 확실할 때만 다시 보내 주세요.</string>
@@ -101,6 +140,27 @@
     <string name="outbox_detail_save_error">메일은 이미 보내졌습니다. 보낸 편지함에 사본을 저장하는 중에만 문제가 생겼습니다. 잠시 뒤 저장을 다시 시도해 주세요.</string>
 
     <string name="outbox_action_retry">다시 시도</string>
+    <string name="outbox_action_send_now">지금 보내기</string>
+    <string name="drafts_title">임시 저장한 메일</string>
+    <string name="drafts_count">임시 저장한 메일 %1$d개</string>
+    <string name="drafts_empty_title">임시 저장한 메일이 없습니다</string>
+    <string name="drafts_empty_body">메일을 쓰다가 닫거나 임시 저장을 누르면 여기에 남습니다. 눌러서 이어 쓸 수 있습니다.</string>
+    <string name="drafts_no_recipient">받는 사람 없음</string>
+    <string name="drafts_delete">삭제</string>
+    <string name="drafts_delete_title">이 메일을 삭제할까요?</string>
+    <string name="drafts_delete_body">임시 저장한 내용과 첨부 파일이 지워지고, 서버의 임시 보관함에 있는 사본도 지웁니다.</string>
+    <string name="outbox_action_cancel_hold">취소하고 고치기</string>
+    <string name="outbox_status_scheduled">보내기 예약됨</string>
+    <string name="outbox_detail_scheduled">%1$s에 보냅니다. 그때 인터넷에 연결되어 있어야 하고, 절전 상태에서는 몇 분 늦을 수 있습니다.</string>
+    <string name="send_tracker_waiting">%1$d초 뒤에 메일을 보냅니다</string>
+    <string name="send_tracker_cancel">취소</string>
+    <string name="send_tracker_sending">메일을 보내는 중입니다</string>
+    <string name="send_tracker_sent">메일을 보냈습니다</string>
+    <string name="send_tracker_copy_failed">메일은 보냈지만 보낸 편지함에 사본을 남기지 못했습니다</string>
+    <string name="send_tracker_failed">메일을 보내지 못했습니다</string>
+    <string name="send_tracker_open">보낼 편지함</string>
+    <string name="send_tracker_dismiss">닫기</string>
+    <string name="send_tracker_too_late">이미 보내기 시작해서 취소하지 못했습니다.</string>
     <string name="outbox_action_discard">삭제</string>
     <string name="outbox_action_check_unknown">보낸 편지함에서 확인</string>
     <string name="outbox_action_confirm_sent">보낸 것으로 처리</string>

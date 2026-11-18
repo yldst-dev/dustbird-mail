@@ -6,6 +6,8 @@ import androidx.compose.foundation.text.input.setTextAndPlaceCursorAtEnd
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.semantics.role
+import app.dustbird.mail.R
 import app.dustbird.mail.core.folder.FolderInfo
 import app.dustbird.mail.core.folder.FolderRoles
 import app.dustbird.mail.core.folder.RoleResolution
@@ -49,6 +51,9 @@ object FormRules {
     fun parsePort(value: String): Int? =
         value.takeIf { it.isNotEmpty() && it.all { char -> char in '0'..'9' } }?.toIntOrNull()?.takeIf { it in 1..65535 }
 
+    fun isComplete(values: FormValues): Boolean = values.password.isNotEmpty() &&
+        listOf(values.address, values.displayName, values.label, values.username, values.imapHost, values.imapPort, values.smtpHost, values.smtpPort).none { it.isBlank() }
+
     fun invalidFields(values: FormValues): Set<FormField> = buildSet {
         if (!Addresses.isValid(values.address)) add(FormField.ADDRESS)
         if (values.password.isEmpty()) add(FormField.PASSWORD)
@@ -88,6 +93,34 @@ class AddAccountFields {
         imapSecurity = profile.imap?.security ?: TransportSecurity.TLS
         smtpSecurity = profile.smtp?.security ?: TransportSecurity.STARTTLS
         advancedOpen = profile.imap == null
+    }
+
+    fun apply(suggestion: AccountSuggestion): List<Int> {
+        val filled = LinkedHashSet<Int>()
+        fun put(state: TextFieldState, value: String?, label: Int) {
+            if (value == null) return
+            state.setTextAndPlaceCursorAtEnd(value)
+            filled += label
+        }
+        put(address, suggestion.address, R.string.add_account_field_address)
+        put(displayName, suggestion.displayName, R.string.add_account_field_display_name)
+        put(label, suggestion.label, R.string.add_account_field_label)
+        put(identityName, suggestion.identityName, R.string.add_account_field_identity_name)
+        put(username, suggestion.username, R.string.add_account_field_username)
+        put(imapHost, suggestion.imapHost, R.string.add_account_section_imap)
+        put(imapPort, suggestion.imapPort, R.string.add_account_section_imap)
+        suggestion.imapSecurity?.let {
+            imapSecurity = it
+            filled += R.string.add_account_section_imap
+        }
+        put(smtpHost, suggestion.smtpHost, R.string.add_account_section_smtp)
+        put(smtpPort, suggestion.smtpPort, R.string.add_account_section_smtp)
+        suggestion.smtpSecurity?.let {
+            smtpSecurity = it
+            filled += R.string.add_account_section_smtp
+        }
+        if (R.string.add_account_field_username in filled || R.string.add_account_section_imap in filled || R.string.add_account_section_smtp in filled) advancedOpen = true
+        return filled.toList()
     }
 
     fun values() = FormValues(
@@ -162,4 +195,5 @@ data class AddAccountUiState(
     val sync: SyncOutcome? = null,
     val roles: List<RolePrompt> = emptyList(),
     val finished: Boolean = false,
+    val assist: AssistState = AssistState.Idle,
 )

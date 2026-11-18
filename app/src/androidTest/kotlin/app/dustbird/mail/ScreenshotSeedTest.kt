@@ -49,9 +49,9 @@ class ScreenshotSeedTest {
         listOf(testerId, friendId).forEach { id ->
             container.sync.syncAccount(id)
             val infos = container.db.folders().forAccount(id).map { FolderInfo(it.path, it.delimiter?.firstOrNull(), it.attributes.split(" ").filter(String::isNotEmpty).toSet()) }
-            val resolved = FolderRoles.resolve(infos, emptyMap())
-            (resolved[FolderRole.SENT] as? RoleResolution.NeedsConfirmation)?.let { container.sync.confirmRole(id, FolderRole.SENT, it.candidates.first()) }
-            (resolved[FolderRole.DRAFTS] as? RoleResolution.NeedsConfirmation)?.let { container.sync.confirmRole(id, FolderRole.DRAFTS, it.candidates.first()) }
+            FolderRoles.resolve(infos, emptyMap()).forEach { (role, resolution) ->
+                if (resolution is RoleResolution.NeedsConfirmation) container.sync.confirmRole(id, role, resolution.candidates.first())
+            }
         }
         deliver("friend@example.test", "friend-pw", "tester@example.test", "내일 회의 자료 확인 부탁드립니다", text("안녕하세요.\n\n내일 오전 10시 회의 자료를 공유드립니다. 검토 후 의견 주세요.\n\n> 지난번 논의한 일정은 그대로 진행합니다.\n\n감사합니다."))
         deliver("friend@example.test", "friend-pw", "tester@example.test", "11월 소식지 (HTML)", html())
@@ -71,7 +71,7 @@ class ScreenshotSeedTest {
     private fun prepare(user: String, password: String) {
         val store = Session.getInstance(Properties().apply { put("mail.imap.ssl.enable", "true") }).getStore("imap")
         store.connect("10.0.2.2", 3993, user, password)
-        listOf("INBOX", "Sent Messages", "Drafts").forEach { name ->
+        listOf("INBOX", "Sent Messages", "Drafts", "Trash", "Archive", "Junk").forEach { name ->
             val folder = store.getFolder(name)
             if (!folder.exists()) folder.create(Folder.HOLDS_MESSAGES)
             folder.open(Folder.READ_WRITE)

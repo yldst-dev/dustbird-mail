@@ -18,13 +18,12 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LargeFlexibleTopAppBar
 import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarDefaults
@@ -34,15 +33,18 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.createSavedStateHandle
+import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import app.dustbird.mail.R
+import app.dustbird.mail.data.AgentMode
 import app.dustbird.mail.ui.LocalAppContainer
 import app.dustbird.mail.ui.accounts.add.AddAccountViewModel
 import app.dustbird.mail.ui.accounts.add.AddStep
@@ -54,16 +56,19 @@ import app.dustbird.mail.ui.accounts.add.SyncStep
 import app.dustbird.mail.ui.accounts.add.VerifyStep
 import app.dustbird.mail.ui.accounts.add.rememberMotion
 import app.dustbird.mail.ui.accounts.add.stepTitle
+import app.dustbird.mail.ui.theme.groupedTopAppBarColors
 import kotlinx.coroutines.flow.map
 
 @Composable
-fun AddAccountRoute(onBack: () -> Unit, onDone: () -> Unit) {
+fun AddAccountRoute(onBack: () -> Unit, onDone: () -> Unit, onOpenAgentSettings: () -> Unit = {}) {
     val container = LocalAppContainer.current
     val viewModel = viewModel<AddAccountViewModel>(
         factory = viewModelFactory { initializer { AddAccountViewModel(container, createSavedStateHandle()) } },
     )
     val state by viewModel.state.collectAsStateWithLifecycle()
     val hasAccounts by remember(container) { container.accounts.accounts.map { it.isNotEmpty() } }
+        .collectAsStateWithLifecycle(initialValue = false)
+    val agentReady by remember(container) { container.agent.current.map { it.mode != AgentMode.OFF && it.consent } }
         .collectAsStateWithLifecycle(initialValue = false)
     val motion = rememberMotion()
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
@@ -74,14 +79,16 @@ fun AddAccountRoute(onBack: () -> Unit, onDone: () -> Unit) {
     BackHandler(enabled = state.step != AddStep.CHOOSE) { viewModel.back() }
 
     Scaffold(
+        containerColor = MaterialTheme.colorScheme.surfaceContainer,
         modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
         topBar = {
             LargeFlexibleTopAppBar(
+                colors = groupedTopAppBarColors(),
                 title = { Text(stringResource(stepTitle(state.step))) },
                 navigationIcon = {
                     if (state.step != AddStep.CHOOSE || hasAccounts) {
                         IconButton(onClick = { if (state.step == AddStep.CHOOSE) onBack() else viewModel.back() }) {
-                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.add_account_navigate_back))
+                            Icon(painterResource(R.drawable.ic_arrow_back), contentDescription = stringResource(R.string.add_account_navigate_back))
                         }
                     }
                 },
@@ -92,8 +99,7 @@ fun AddAccountRoute(onBack: () -> Unit, onDone: () -> Unit) {
         Column(Modifier.fillMaxSize().padding(padding).consumeWindowInsets(padding).imePadding()) {
             LinearProgressIndicator(
                 progress = { progress },
-                modifier = Modifier.fillMaxWidth().semantics { contentDescription = progressLabel },
-                drawStopIndicator = {},
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp).semantics { contentDescription = progressLabel },
             )
             AnimatedContent(
                 targetState = state.step,
@@ -112,8 +118,11 @@ fun AddAccountRoute(onBack: () -> Unit, onDone: () -> Unit) {
                 val providerId = state.providerId
                 when {
                     step == AddStep.CHOOSE || providerId == null -> ChooseStep(viewModel::choose)
-                    step == AddStep.PREPARE -> PrepareStep(providerId, state.acknowledged, viewModel::acknowledge, viewModel::proceed)
-                    step == AddStep.FORM -> FormStep(providerId, viewModel.fields, state.showErrors, motion, viewModel::verify)
+                    step == AddStep.PREPARE -> PrepareStep(providerId, state.acknowledged, motion, viewModel::acknowledge, viewModel::proceed)
+                    step == AddStep.FORM -> FormStep(
+                        providerId, viewModel.fields, state.showErrors, motion, viewModel::verify,
+                        state.assist, agentReady, viewModel::assist, viewModel::dismissAssist, onOpenAgentSettings,
+                    )
                     step == AddStep.VERIFY -> VerifyStep(state, viewModel::save, viewModel::backToForm, viewModel::verify)
                     step == AddStep.SYNC -> SyncStep(state, viewModel::retrySync, viewModel::continueAfterSync, viewModel::finish)
                     else -> RolesStep(state, viewModel::selectRole, viewModel::confirmRoles)

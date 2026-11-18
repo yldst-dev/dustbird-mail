@@ -84,6 +84,8 @@ interface FolderDao {
     @Query("SELECT * FROM folder WHERE accountId = :accountId ORDER BY path")
     fun observeForAccount(accountId: Long): Flow<List<FolderEntity>>
 
+    @Query("SELECT * FROM folder ORDER BY accountId, path")
+    fun observeAll(): Flow<List<FolderEntity>>
     @Query("SELECT * FROM folder WHERE id = :id")
     suspend fun get(id: Long): FolderEntity?
 
@@ -109,18 +111,44 @@ data class UnreadCount(val accountId: Long, val count: Int)
 interface MessageDao {
     @Query(
         "SELECT m.* FROM message m JOIN folder f ON f.id = m.folderId WHERE f.accountId = :accountId AND f.role = :role " +
+            "AND m.listState = 0 AND (:unreadOnly = 0 OR m.seen = 0) AND (:flaggedOnly = 0 OR m.flagged = 1) " +
             "ORDER BY m.sortDate DESC, m.id DESC LIMIT :limit",
     )
-    fun observeByAccountAndRole(accountId: Long, role: FolderRole, limit: Int): Flow<List<MessageEntity>>
-
+    fun observeByAccountAndRole(accountId: Long, role: FolderRole, limit: Int, unreadOnly: Boolean, flaggedOnly: Boolean): Flow<List<MessageEntity>>
     @Query(
-        "SELECT m.* FROM message m JOIN folder f ON f.id = m.folderId WHERE f.role = :role AND m.id IN (" +
-            "SELECT MIN(m2.id) FROM message m2 JOIN folder f2 ON f2.id = m2.folderId WHERE f2.role = :role " +
+        "SELECT * FROM message WHERE folderId = :folderId AND listState = 0 AND (:unreadOnly = 0 OR seen = 0) " +
+            "AND (:flaggedOnly = 0 OR flagged = 1) ORDER BY sortDate DESC, id DESC LIMIT :limit",
+    )
+    fun observeByFolder(folderId: Long, limit: Int, unreadOnly: Boolean, flaggedOnly: Boolean): Flow<List<MessageEntity>>
+    @Query(
+        "SELECT m.* FROM message m JOIN folder f ON f.id = m.folderId WHERE f.role = :role AND m.listState = 0 " +
+            "AND (:unreadOnly = 0 OR m.seen = 0) AND (:flaggedOnly = 0 OR m.flagged = 1) AND m.id IN (" +
+            "SELECT MIN(m2.id) FROM message m2 JOIN folder f2 ON f2.id = m2.folderId WHERE f2.role = :role AND m2.listState = 0 " +
             "GROUP BY m2.accountId, COALESCE(m2.messageId, 'row:' || m2.id)) " +
             "ORDER BY m.sortDate DESC, m.id DESC LIMIT :limit",
     )
-    fun observeUnified(role: FolderRole, limit: Int): Flow<List<MessageEntity>>
-
+    fun observeUnified(role: FolderRole, limit: Int, unreadOnly: Boolean, flaggedOnly: Boolean): Flow<List<MessageEntity>>
+    @Query(
+        "SELECT * FROM message WHERE listState != 1 AND (:accountId < 0 OR accountId = :accountId) AND (" +
+            "subject LIKE :pattern ESCAPE '\\' OR fromName LIKE :pattern ESCAPE '\\' OR fromAddress LIKE :pattern ESCAPE '\\' " +
+            "OR preview LIKE :pattern ESCAPE '\\' OR toAddresses LIKE :pattern ESCAPE '\\') " +
+            "ORDER BY sortDate DESC, id DESC LIMIT :limit",
+    )
+    fun search(pattern: String, accountId: Long, limit: Int): Flow<List<MessageEntity>>
+    @Query("SELECT * FROM message WHERE id IN (:ids)")
+    suspend fun byIds(ids: List<Long>): List<MessageEntity>
+    @Query("SELECT * FROM message ORDER BY sortDate DESC LIMIT :limit")
+    suspend fun recent(limit: Int): List<MessageEntity>
+    @Query("UPDATE message SET listState = :state WHERE id IN (:ids)")
+    suspend fun setListState(ids: List<Long>, state: Int)
+    @Query("UPDATE message SET listState = 0 WHERE listState = 1")
+    suspend fun unhideAll()
+    @Query("DELETE FROM message WHERE id IN (:ids)")
+    suspend fun deleteByIds(ids: List<Long>)
+    @Query("UPDATE message SET flagged = :flagged WHERE id IN (:ids)")
+    suspend fun setFlagged(ids: List<Long>, flagged: Boolean)
+    @Query("UPDATE message SET answered = 1 WHERE id = :id")
+    suspend fun markAnswered(id: Long)
     @Query("SELECT * FROM message WHERE id = :id")
     fun observe(id: Long): Flow<MessageEntity?>
 
@@ -129,6 +157,9 @@ interface MessageDao {
 
     @Query("SELECT uid FROM message WHERE folderId = :folderId")
     suspend fun uids(folderId: Long): List<Long>
+
+    @Query("SELECT id FROM message WHERE accountId = :accountId")
+    suspend fun idsForAccount(accountId: Long): List<Long>
 
     @Query("SELECT COALESCE(MIN(uid), 0) FROM message WHERE folderId = :folderId")
     suspend fun minUid(folderId: Long): Long
@@ -162,7 +193,7 @@ interface MessageDao {
 
     @Query(
         "SELECT f.accountId AS accountId, COUNT(*) AS count FROM message m JOIN folder f ON f.id = m.folderId " +
-            "WHERE f.role = 'INBOX' AND m.seen = 0 GROUP BY f.accountId",
+            "WHERE f.role = 'INBOX' AND m.seen = 0 AND m.listState = 0 GROUP BY f.accountId",
     )
     fun observeUnreadCounts(): Flow<List<UnreadCount>>
 
@@ -175,14 +206,23 @@ interface MessageDao {
 
 @Dao
 interface DraftDao {
-    @Query("SELECT * FROM draft ORDER BY updatedAt DESC")
+    @Query("SELECT * FROM draft WHERE id NOT IN (SELECT draftId FROM outbox WHERE draftId IS NOT NULL) ORDER BY updatedAt DESC")
     fun observeAll(): Flow<List<DraftEntity>>
+
+    @Query("SELECT * FROM draft WHERE accountId = :accountId AND messageId = :messageId LIMIT 1")
+    suspend fun byMessageId(accountId: Long, messageId: String): DraftEntity?
 
     @Query("SELECT * FROM draft WHERE id = :id")
     suspend fun get(id: Long): DraftEntity?
 
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun upsert(entity: DraftEntity): Long
+    @Insert
+    suspend fun insert(entity: DraftEntity): Long
+
+    @Update
+    suspend fun update(entity: DraftEntity)
+
+    @Query("UPDATE draft SET serverCopyAccountId = :accountId WHERE id = :id")
+    suspend fun setServerCopy(id: Long, accountId: Long?)
 
     @Query("DELETE FROM draft WHERE id = :id")
     suspend fun delete(id: Long)
@@ -193,10 +233,26 @@ interface DraftDao {
     @Query("SELECT COUNT(*) FROM draft WHERE accountId = :accountId")
     suspend fun countForAccount(accountId: Long): Int
 
+    @Query("SELECT id FROM draft WHERE accountId = :accountId")
+    suspend fun idsForAccount(accountId: Long): List<Long>
+
     @Query("SELECT COUNT(*) FROM draft WHERE identityId = :identityId")
     suspend fun countForIdentity(identityId: Long): Int
 }
 
+@Dao
+interface DraftAttachmentDao {
+    @Query("SELECT * FROM draft_attachment WHERE draftId = :draftId ORDER BY id")
+    fun observe(draftId: Long): Flow<List<DraftAttachmentEntity>>
+    @Query("SELECT * FROM draft_attachment WHERE draftId = :draftId ORDER BY id")
+    suspend fun forDraft(draftId: Long): List<DraftAttachmentEntity>
+    @Query("SELECT * FROM draft_attachment WHERE id = :id")
+    suspend fun get(id: Long): DraftAttachmentEntity?
+    @Insert
+    suspend fun insert(entity: DraftAttachmentEntity): Long
+    @Query("DELETE FROM draft_attachment WHERE id = :id")
+    suspend fun delete(id: Long)
+}
 @Dao
 interface OutboxDao {
     @Query("SELECT * FROM outbox ORDER BY createdAt DESC")
@@ -205,11 +261,35 @@ interface OutboxDao {
     @Query("SELECT * FROM outbox WHERE id = :id")
     suspend fun get(id: Long): OutboxEntity?
 
+    @Query("SELECT * FROM outbox WHERE id = :id")
+    fun observe(id: Long): Flow<OutboxEntity?>
+
     @Query("SELECT * FROM outbox WHERE accountId = :accountId AND state IN (:states) ORDER BY createdAt")
     suspend fun byAccountAndStates(accountId: Long, states: List<SendState>): List<OutboxEntity>
 
     @Query("SELECT * FROM outbox WHERE state = 'SENDING'")
     suspend fun sending(): List<OutboxEntity>
+
+    @Query("SELECT * FROM outbox WHERE state = 'ACCEPTED'")
+    suspend fun accepted(): List<OutboxEntity>
+
+    @Query("SELECT * FROM outbox WHERE state = 'SAVED'")
+    suspend fun saved(): List<OutboxEntity>
+
+    @Query("UPDATE outbox SET rawPath = NULL WHERE id = :id")
+    suspend fun clearRaw(id: Long)
+
+    @Query("SELECT * FROM outbox WHERE draftId = :draftId")
+    suspend fun byDraft(draftId: Long): List<OutboxEntity>
+
+    @Query("SELECT MIN(sendAfter) FROM outbox WHERE state = 'QUEUED' AND sendAfter > :now")
+    suspend fun nextDue(now: Long): Long?
+
+    @Query("UPDATE outbox SET rawPath = :rawPath, envelopeFrom = :envelopeFrom, recipients = :recipients, draftId = NULL, updatedAt = :now WHERE id = :id")
+    suspend fun release(id: Long, rawPath: String, envelopeFrom: String, recipients: String, now: Long)
+
+    @Query("UPDATE outbox SET sendAfter = :sendAfter, updatedAt = :now WHERE id = :id")
+    suspend fun setSendAfter(id: Long, sendAfter: Long, now: Long)
 
     @Query("SELECT COUNT(*) FROM outbox WHERE accountId = :accountId AND state IN ('QUEUED','SENDING','UNKNOWN','ACCEPTED','SAVE_FAILED')")
     suspend fun unsettledCount(accountId: Long): Int
@@ -267,8 +347,10 @@ interface SyncDao {
     @Query("SELECT uid, seen, answered, flagged FROM message WHERE folderId = :folderId ORDER BY uid DESC LIMIT :limit")
     fun cachedFlags(folderId: Long, limit: Int): List<FlagRow>
 
-    @Query("SELECT COALESCE(MIN(uid), 0) FROM message WHERE folderId = :folderId")
+    @Query("SELECT COALESCE(MIN(uid), 0) FROM message WHERE folderId = :folderId AND listState != 2")
     fun oldestUid(folderId: Long): Long
+    @Query("UPDATE message SET listState = 0 WHERE folderId = :folderId AND uid IN (:uids) AND listState = 2")
+    fun promote(folderId: Long, uids: List<Long>)
 
     @Query("SELECT * FROM pending_flag WHERE folderId = :folderId ORDER BY id")
     fun pending(folderId: Long): List<PendingFlagEntity>
@@ -302,4 +384,50 @@ interface MaintenanceDao {
 
     @Query("DELETE FROM notified WHERE accountId = :accountId")
     suspend fun deleteNotified(accountId: Long)
+}
+
+@Dao
+interface AgentDao {
+    @Query("SELECT * FROM agent_session ORDER BY updatedAt DESC LIMIT :limit")
+    fun observeSessions(limit: Int): Flow<List<AgentSessionEntity>>
+    @Query("SELECT * FROM agent_session WHERE id = :id")
+    suspend fun session(id: Long): AgentSessionEntity?
+    @Insert
+    suspend fun insertSession(entity: AgentSessionEntity): Long
+    @Query("UPDATE agent_session SET updatedAt = :now, title = :title WHERE id = :id")
+    suspend fun touchSession(id: Long, title: String, now: Long)
+    @Query("DELETE FROM agent_session WHERE id = :id")
+    suspend fun deleteSession(id: Long)
+    @Query("DELETE FROM agent_session WHERE updatedAt < :before")
+    suspend fun pruneSessions(before: Long)
+    @Query("SELECT * FROM agent_item WHERE sessionId = :sessionId ORDER BY id")
+    fun observeItems(sessionId: Long): Flow<List<AgentItemEntity>>
+    @Query("SELECT * FROM agent_item WHERE sessionId = :sessionId ORDER BY id")
+    suspend fun items(sessionId: Long): List<AgentItemEntity>
+    @Insert
+    suspend fun insertItem(entity: AgentItemEntity): Long
+    @Query("SELECT * FROM agent_memory ORDER BY id")
+    fun observeMemory(): Flow<List<AgentMemoryEntity>>
+    @Query("SELECT * FROM agent_memory ORDER BY id")
+    suspend fun memory(): List<AgentMemoryEntity>
+    @Insert
+    suspend fun insertMemory(entity: AgentMemoryEntity): Long
+    @Query("DELETE FROM agent_memory WHERE id = :id")
+    suspend fun deleteMemory(id: Long)
+    @Query("SELECT * FROM agent_automation ORDER BY id")
+    fun observeAutomations(): Flow<List<AgentAutomationEntity>>
+    @Query("SELECT * FROM agent_automation WHERE enabled = 1 AND trigger = :trigger ORDER BY id")
+    suspend fun enabledAutomations(trigger: String): List<AgentAutomationEntity>
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertAutomation(entity: AgentAutomationEntity): Long
+    @Query("UPDATE agent_automation SET lastRunAt = :at WHERE id = :id")
+    suspend fun markAutomationRun(id: Long, at: Long)
+    @Query("DELETE FROM agent_automation WHERE id = :id")
+    suspend fun deleteAutomation(id: Long)
+    @Query("SELECT * FROM agent_log ORDER BY id DESC LIMIT :limit")
+    fun observeLog(limit: Int): Flow<List<AgentLogEntity>>
+    @Insert
+    suspend fun insertLog(entity: AgentLogEntity)
+    @Query("DELETE FROM agent_log WHERE at < :before")
+    suspend fun pruneLog(before: Long)
 }

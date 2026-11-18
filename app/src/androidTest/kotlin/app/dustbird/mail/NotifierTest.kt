@@ -64,11 +64,24 @@ class NotifierTest {
         val first = active.first { it.id == 11 }.notification
         assertEquals("보낸 사람", first.extras.getCharSequence("android.title").toString())
         assertEquals("제목입니다", first.extras.getCharSequence("android.text").toString())
+        assertEquals(listOf("읽음", "보관", "삭제"), first.actions.map { it.title.toString() })
         assertTrue(first.extras.getCharSequence("android.subText").toString().contains("업무"))
         assertTrue(first.extras.getCharSequence("android.subText").toString().contains("biz"))
         assertTrue(active.first { it.id == 12 }.notification.extras.getCharSequence("android.subText").toString().contains("미확인"))
         assertTrue(active.any { it.notification.flags and android.app.Notification.FLAG_GROUP_SUMMARY != 0 })
         assertNotNull(manager.getNotificationChannel("mail_account_${account.id}"))
+    }
+
+    @Test
+    fun cancellingTheLastMailAlsoRemovesTheGroupSummary() {
+        notifier.notifyNew(account, listOf(NewMail(51, "a", "b", "", null), NewMail(52, "c", "d", "", null)))
+        await { mine().size == 3 }
+        AndroidNotifier.cancelMessage(context, account.id, 51)
+        await { mine().size == 2 }
+        assertEquals(2, mine().size)
+        AndroidNotifier.cancelMessage(context, account.id, 52)
+        await { mine().isEmpty() }
+        assertTrue(mine().isEmpty())
     }
 
     @Test

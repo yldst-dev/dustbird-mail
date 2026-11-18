@@ -29,6 +29,7 @@ object FailureCodes {
     const val SAVE_NO_FOLDER = "SAVE_NO_FOLDER"
     const val SAVE_NOT_BY_SERVER = "SAVE_NOT_BY_SERVER"
     const val SAVE_ERROR = "SAVE_ERROR"
+    const val COMPOSE = "COMPOSE"
 
     fun rejected(kind: RejectKind, code: Int?): String = if (code == null) kind.name else "${kind.name}|$code"
 }

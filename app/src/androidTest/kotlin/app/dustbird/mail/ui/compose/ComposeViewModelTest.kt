@@ -5,6 +5,11 @@ import androidx.lifecycle.SavedStateHandle
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import app.dustbird.mail.R
 import app.dustbird.mail.core.model.EmailAddress
+import app.dustbird.mail.core.send.FailureCodes
+import app.dustbird.mail.core.send.SendState
+import app.dustbird.mail.data.repo.DraftContent
+import app.dustbird.mail.sync.EnqueueResult
+import java.io.File
 import app.dustbird.mail.ui.nav.ComposeArgs
 import app.dustbird.mail.ui.nav.ComposeMode
 import kotlinx.coroutines.flow.first
@@ -76,6 +81,22 @@ class ComposeViewModelTest {
     }
 
     @Test
+    fun knownSendersAreSuggestedButOwnAndAlreadyAddedAddressesAreNot() {
+        fixture.seedMessage(first, "friend@example.com", "Hello", "Body", "<known-1@example.com>")
+        val viewModel = fixture.openViewModel()
+        onMain { viewModel.to.input.setTextAndPlaceCursorAtEnd("fri") }
+        waitUntil { viewModel.suggestions(viewModel.to).isNotEmpty() }
+        assertEquals(listOf("friend@example.com"), viewModel.suggestions(viewModel.to).map { it.address })
+        onMain { viewModel.cc.input.setTextAndPlaceCursorAtEnd("one") }
+        assertTrue(viewModel.suggestions(viewModel.cc).isEmpty())
+        onMain { viewModel.pick(viewModel.to, viewModel.suggestions(viewModel.to).single()) }
+        assertEquals(listOf("friend@example.com"), viewModel.to.chips.map { it.address })
+        assertEquals("", viewModel.to.input.text.toString())
+        onMain { viewModel.cc.input.setTextAndPlaceCursorAtEnd("fri") }
+        assertTrue(viewModel.suggestions(viewModel.cc).isEmpty())
+    }
+
+    @Test
     fun changingTheIdentityMovesTheDraftToTheOtherAccountAndSwapsTheSignature() {
         val viewModel = fixture.openViewModel()
         onMain {
@@ -116,6 +137,106 @@ class ComposeViewModelTest {
         assertEquals(RecipientProblem.INVALID, viewModel.recipientProblem)
         assertEquals(SendPhase.Idle, viewModel.phase)
         assertTrue(runBlocking { fixture.db.outbox().observeAll().first() }.isEmpty())
+    }
+
+    @Test
+    fun sendWaitsForTheDelayKeepsTheDraftAndCanBeCancelled() {
+        runBlocking { fixture.container.settings.setSendDelaySeconds(30) }
+        val viewModel = fixture.openViewModel()
+        onMain {
+            viewModel.to.add(listOf(EmailAddress("user@example.com")))
+            viewModel.subject.setTextAndPlaceCursorAtEnd("Held mail")
+            viewModel.sendNow()
+        }
+        waitUntil { viewModel.exit != null }
+        assertEquals(ComposeExit.Held, viewModel.exit)
+        val send = fixture.container.send
+        val row = runBlocking { fixture.db.outbox().observeAll().first() }.single()
+        assertEquals(SendState.QUEUED, row.state)
+        assertTrue(row.sendAfter > System.currentTimeMillis() + 20_000)
+        assertEquals(row.id, send.tracked.value)
+        val draftId = assertNotNull(row.draftId)
+        assertNotNull(runBlocking { fixture.db.drafts().get(draftId) })
+        assertTrue(drafts().isEmpty())
+
+        runBlocking { send.processAccount(row.accountId) }
+        assertEquals(SendState.QUEUED, runBlocking { fixture.db.outbox().get(row.id) }?.state)
+        assertFalse(runBlocking { send.hasQueued() })
+
+        assertEquals(draftId, runBlocking { send.cancelHeld(row.id) })
+        assertTrue(runBlocking { fixture.db.outbox().observeAll().first() }.isEmpty())
+        assertEquals(listOf(draftId), drafts().map { it.id })
+        assertNull(send.tracked.value)
+        assertNull(runBlocking { send.cancelHeld(row.id) })
+    }
+
+    @Test
+    fun scheduledMailWaitsInTheOutboxAndIsNotTracked() {
+        runBlocking { fixture.container.settings.setSendDelaySeconds(5) }
+        val viewModel = fixture.openViewModel()
+        val at = System.currentTimeMillis() + 3_600_000
+        onMain {
+            viewModel.to.add(listOf(EmailAddress("user@example.com")))
+            viewModel.subject.setTextAndPlaceCursorAtEnd("Later mail")
+            viewModel.schedule(at)
+        }
+        waitUntil { viewModel.exit != null }
+        assertEquals(ComposeExit.Scheduled(at), viewModel.exit)
+        val send = fixture.container.send
+        val row = runBlocking { fixture.db.outbox().observeAll().first() }.single()
+        assertEquals(at, row.sendAfter)
+        assertNotNull(row.draftId)
+        assertNull(send.tracked.value)
+        assertEquals(at, runBlocking { send.nextDue() })
+        runBlocking { send.processAccount(row.accountId) }
+        assertEquals(SendState.QUEUED, runBlocking { fixture.db.outbox().get(row.id) }?.state)
+    }
+
+    @Test
+    fun attachedFilesSurviveLaterSavesAndTheSaveBeforeSending() {
+        runBlocking { fixture.container.settings.setSendDelaySeconds(30) }
+        val viewModel = fixture.openViewModel()
+        onMain {
+            viewModel.to.add(listOf(EmailAddress("user@example.com")))
+            viewModel.subject.setTextAndPlaceCursorAtEnd("With a file")
+        }
+        val id = assertNotNull(runBlocking { viewModel.saveLocal() })
+        val source = File(fixture.context.cacheDir, "attach-source.txt").apply { writeText("attached text") }
+        assertTrue(runBlocking { fixture.container.drafts.addAttachment(id, source, "메모.txt", "text/plain") })
+        fun names() = runBlocking { fixture.db.draftAttachments().forDraft(id) }.map { it.fileName }
+
+        onMain { viewModel.subject.setTextAndPlaceCursorAtEnd("With a file, edited") }
+        assertEquals(id, runBlocking { viewModel.saveLocal() })
+        assertEquals(listOf("메모.txt"), names())
+
+        onMain { viewModel.send() }
+        waitUntil { viewModel.exit != null }
+        assertEquals(listOf("메모.txt"), names())
+        assertEquals("With a file, edited", runBlocking { fixture.db.drafts().get(id) }?.subject)
+    }
+
+    @Test
+    fun aDraftThatCannotBeComposedFailsVisiblyInsteadOfBlockingTheQueue() {
+        val send = fixture.container.send
+        val draftId = runBlocking {
+            fixture.container.drafts.save(
+                DraftContent(null, first.identityId, listOf(EmailAddress("user@example.com")), emptyList(), emptyList(), "Broken", "body", "<bad id>", emptyList()),
+            )
+        }
+        assertEquals(EnqueueResult.Unsendable, runBlocking { send.enqueue(draftId) })
+        assertTrue(runBlocking { fixture.db.outbox().observeAll().first() }.isEmpty())
+
+        val held = runBlocking { send.enqueue(draftId, System.currentTimeMillis() + 600_000) } as EnqueueResult.Queued
+        runBlocking {
+            fixture.db.outbox().setSendAfter(held.outboxId, 0, System.currentTimeMillis())
+            send.processAccount(first.accountId)
+        }
+        val row = assertNotNull(runBlocking { fixture.db.outbox().get(held.outboxId) })
+        assertEquals(SendState.FAILED, row.state)
+        assertEquals(FailureCodes.COMPOSE, row.failure)
+        assertFalse(runBlocking { send.hasQueued() })
+        assertEquals(draftId, runBlocking { send.cancelHeld(held.outboxId) })
+        assertEquals(listOf(draftId), drafts().map { it.id })
     }
 
     @Test

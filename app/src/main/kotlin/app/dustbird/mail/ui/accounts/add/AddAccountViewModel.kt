@@ -3,10 +3,13 @@ package app.dustbird.mail.ui.accounts.add
 import androidx.compose.foundation.text.input.clearText
 import androidx.compose.foundation.text.input.setTextAndPlaceCursorAtEnd
 import androidx.compose.runtime.snapshotFlow
+import androidx.compose.ui.semantics.role
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import app.dustbird.mail.AppContainer
+import app.dustbird.mail.core.agent.AgentBackendException
+import app.dustbird.mail.core.agent.BackendFailure
 import app.dustbird.mail.core.model.ConnectionStages
 import app.dustbird.mail.core.model.Credentials
 import app.dustbird.mail.core.model.FolderRole
@@ -35,6 +38,7 @@ private const val KEY_PROVIDER = "add_account_provider"
 private const val KEY_NAME = "add_account_name"
 private const val KEY_ACCOUNT = "add_account_account"
 private const val DETAIL_LIMIT = 300
+private const val SECRET_GUARD = 4
 
 class AddAccountViewModel(
     private val container: AppContainer,
@@ -50,6 +54,7 @@ class AddAccountViewModel(
     val state: StateFlow<AddAccountUiState> = _state.asStateFlow()
 
     private var verifyJob: Job? = null
+    private var assistJob: Job? = null
     private var pending: NewAccount? = null
     private var autoUsername = ""
 
@@ -70,7 +75,8 @@ class AddAccountViewModel(
             autoUsername = ""
             fields.reset(profile, if (profile.imap == null) "" else suggestedName)
             handle[KEY_NAME] = suggestedName
-            set { copy(providerId = providerId, acknowledged = false, showErrors = false, saveError = null) }
+            assistJob?.cancel()
+            set { copy(providerId = providerId, acknowledged = false, showErrors = false, saveError = null, assist = AssistState.Idle) }
         }
         set { copy(step = AddStep.PREPARE) }
     }
@@ -124,6 +130,32 @@ class AddAccountViewModel(
             val smtp = withContext(Dispatchers.IO) { smtpCheck(new.smtp, credentials) }.scrubbed(secret)
             set { copy(smtp = Stage.Done(smtp)) }
         }
+    }
+
+    fun assist(text: String) {
+        val providerId = _state.value.providerId ?: return
+        val secret = fields.password.text.toString()
+        val request = (if (secret.length >= SECRET_GUARD) text.replace(secret, "") else text).trim().take(AccountAssist.TEXT_LIMIT)
+        if (request.isEmpty() || assistJob?.isActive == true) return
+        set { copy(assist = AssistState.Running) }
+        assistJob = viewModelScope.launch {
+            val next = try {
+                val arguments = container.agent.extract(AccountAssist.SOURCE, AccountAssist.instructions(providerId), request, AccountAssist.spec)
+                AssistState.Done(fields.apply(AccountAssist.parse(arguments, providerId)))
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: AgentBackendException) {
+                AssistState.Failed(error.failure)
+            } catch (_: Exception) {
+                AssistState.Failed(BackendFailure.SERVER)
+            }
+            set { copy(assist = next) }
+        }
+    }
+
+    fun dismissAssist() {
+        assistJob?.cancel()
+        set { if ((assist as? AssistState.Done)?.filled.isNullOrEmpty()) copy(assist = AssistState.Idle) else this }
     }
 
     fun backToForm() {

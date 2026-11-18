@@ -7,6 +7,7 @@ import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -69,12 +70,19 @@ class MessageScreenTest {
         compose.onNodeWithText("Quarterly report").assertExists()
         compose.onNodeWithText("Sender Name").assertExists()
         compose.onNodeWithText("sender@example.com").assertExists()
-        compose.onNodeWithText(text(R.string.message_identity_value, "Work", "work@example.com"), substring = true).assertExists()
+        compose.onNodeWithText("Work").assertExists()
+        compose.onAllNodes(hasTestTag(MessageAccountTag), useUnmergedTree = true).assertCountEquals(0)
+        compose.onAllNodesWithText(text(R.string.message_identity_value, "Work", "work@example.com")).assertCountEquals(0)
+        compose.onNodeWithTag(MessageSenderTag).performClick()
+        compose.onNodeWithText(text(R.string.message_identity_value, "Work", "work@example.com")).assertExists()
+        compose.onNodeWithText(text(R.string.message_date)).assertExists()
         compose.onAllNodesWithText(text(R.string.message_account)).assertCountEquals(0)
-        compose.onNodeWithText(text(R.string.message_attachments, 2)).assertExists()
-        compose.onNodeWithText(text(R.string.message_attachments_note)).assertExists()
+        compose.onNodeWithTag(MessageSenderTag).performClick()
+        compose.onAllNodesWithText(text(R.string.message_date)).assertCountEquals(0)
+        compose.onAllNodesWithText(text(R.string.message_attachments_note)).assertCountEquals(0)
         compose.onAllNodesWithText(text(R.string.message_link_open)).assertCountEquals(0)
-        compose.onNodeWithText(text(R.string.message_attachments_show)).performClick()
+        compose.onNodeWithText(text(R.string.message_attachments, 2)).performClick()
+        compose.onNodeWithText(text(R.string.message_attachments_note)).assertExists()
         compose.onNodeWithText("report.pdf").assertExists()
         compose.onNodeWithText(text(R.string.message_attachment_meta, "application/pdf", "1.5 KB")).assertExists()
         compose.onNodeWithText(text(R.string.message_attachment_unnamed)).assertExists()
@@ -91,6 +99,9 @@ class MessageScreenTest {
         val id = fixture.message(first, to = listOf(EmailAddress("someone.else@example.com")), text = "body")
         show(id)
         awaitText("body")
+        compose.onNodeWithTag(MessageAccountTag, useUnmergedTree = true).assertExists()
+        compose.onNodeWithText(text(R.string.message_identity_unknown)).assertExists()
+        compose.onNodeWithTag(MessageSenderTag).performClick()
         compose.onNodeWithText(text(R.string.message_account)).assertExists()
         compose.onNodeWithText(text(R.string.message_identity_unknown)).assertExists()
     }

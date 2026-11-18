@@ -24,6 +24,17 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.channels.Channel
+import java.io.File
+import app.dustbird.mail.data.repo.MoveTarget
+import app.dustbird.mail.data.repo.AttachmentResult
+import app.dustbird.mail.data.db.FolderEntity
+import app.dustbird.mail.core.model.FolderRole
+import app.dustbird.mail.R
+import androidx.annotation.StringRes
+import android.net.Uri
+import android.content.ContentResolver
 
 sealed interface HeaderState {
     data object Loading : HeaderState
@@ -44,12 +55,28 @@ sealed interface BodyState {
         val html: String?,
         val text: String?,
         val blockedImages: Int,
+        val unshownImages: Int,
         val imagesAllowed: Boolean,
         val attachments: List<AttachmentInfo>,
     ) : BodyState
 }
 
+sealed interface MessageEvent {
+    data class Notice(@StringRes val text: Int) : MessageEvent
+    data object Gone : MessageEvent
+    data class Open(val file: File, val info: AttachmentInfo) : MessageEvent
+}
+
 class MessageViewModel(private val container: AppContainer, private val id: Long) : ViewModel() {
+    val events = Channel<MessageEvent>(Channel.BUFFERED)
+    private val _downloading = MutableStateFlow<Set<Int>>(emptySet())
+    val downloading: StateFlow<Set<Int>> = _downloading
+    private val _confirmDelete = MutableStateFlow(false)
+    val confirmDelete: StateFlow<Boolean> = _confirmDelete
+    val folders: StateFlow<List<FolderEntity>> = combine(container.mail.detail(id), container.mail.folders()) { detail, all ->
+        all.filter { it.accountId == detail?.summary?.accountId && it.id != detail.summary.folderId }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
     private val loaded = MutableStateFlow<BodyResult?>(null)
     private val replyAllUseful = MutableStateFlow(false)
     private val allowImages = container.mail.detail(id).map { it?.allowRemoteImages }.distinctUntilChanged()
@@ -97,6 +124,58 @@ class MessageViewModel(private val container: AppContainer, private val id: Long
         container.scope.launch { container.mail.allowImages(id) }
     }
 
+    fun setFlagged(flagged: Boolean) {
+        container.scope.launch {
+            if (!container.mail.setFlagged(listOf(id), flagged)) events.trySend(MessageEvent.Notice(R.string.mailbox_star_failed))
+        }
+    }
+
+    fun move(target: MoveTarget) {
+        container.scope.launch {
+            val ticket = container.actions.start(listOf(id), target, announceSkipped = false)
+            when {
+                ticket == null -> Unit
+                ticket.count > 0 -> events.trySend(MessageEvent.Gone)
+                else -> events.trySend(MessageEvent.Notice(R.string.mailbox_move_unavailable))
+            }
+        }
+    }
+
+    fun delete() {
+        viewModelScope.launch {
+            if (container.actions.deletesPermanently(listOf(id))) _confirmDelete.value = true else move(MoveTarget.Role(FolderRole.TRASH))
+        }
+    }
+
+    fun answerDeleteConfirm(confirmed: Boolean) {
+        _confirmDelete.value = false
+        if (confirmed) move(MoveTarget.Role(FolderRole.TRASH))
+    }
+
+    fun openAttachment(index: Int) = fetch(index) { file, info -> events.trySend(MessageEvent.Open(file, info)) }
+
+    fun saveAttachment(index: Int, target: Uri, resolver: ContentResolver) = fetch(index) { file, _ ->
+        val saved = withContext(Dispatchers.IO) {
+            runCatching { resolver.openOutputStream(target)?.use { output -> file.inputStream().use { it.copyTo(output) } } != null }.getOrDefault(false)
+        }
+        events.trySend(MessageEvent.Notice(if (saved) R.string.message_attachment_saved else R.string.message_attachment_failed))
+    }
+
+    private fun fetch(index: Int, then: suspend (File, AttachmentInfo) -> Unit) {
+        if (index in _downloading.value) return
+        _downloading.update { it + index }
+        viewModelScope.launch {
+            try {
+                when (val result = container.mail.attachment(id, index)) {
+                    is AttachmentResult.Ready -> then(result.file, result.info)
+                    is AttachmentResult.Failed -> events.trySend(MessageEvent.Notice(R.string.message_attachment_failed))
+                }
+            } finally {
+                _downloading.update { it - index }
+            }
+        }
+    }
+
     private suspend fun replyAllDiffersFromReply(): Boolean = try {
         val reply = container.mail.replySeed(id, false, "")
         val all = container.mail.replySeed(id, true, "")
@@ -116,6 +195,7 @@ class MessageViewModel(private val container: AppContainer, private val id: Long
             html = sanitized?.body?.takeIf { it.isNotBlank() },
             text = result.text?.takeIf { it.isNotBlank() },
             blockedImages = sanitized?.blockedRemoteImages ?: 0,
+            unshownImages = sanitized?.unshownImages ?: 0,
             imagesAllowed = allowImages,
             attachments = result.attachments,
         )

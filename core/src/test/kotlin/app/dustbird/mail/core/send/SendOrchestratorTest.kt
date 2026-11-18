@@ -41,6 +41,11 @@ private class FakeImap : ImapConnector {
             override fun fetchFlags(path: String, uids: List<Long>): Map<Long, MessageFlags> = emptyMap()
             override fun fetchContent(path: String, uid: Long): ParsedContent? = null
             override fun setSeen(path: String, uid: Long, seen: Boolean) = Unit
+            override fun setFlag(path: String, uids: List<Long>, flag: app.dustbird.mail.core.net.MessageFlag, value: Boolean) = Unit
+            override fun move(path: String, uids: List<Long>, target: String) = Unit
+            override fun delete(path: String, uids: List<Long>) = Unit
+            override fun search(path: String, query: String): List<Long> = emptyList()
+            override fun fetchAttachment(path: String, uid: Long, index: Int, sink: java.io.OutputStream): Boolean = false
             override fun append(path: String, raw: ByteArray, seen: Boolean, draft: Boolean): Long? {
                 if (failAppend) error("append failed")
                 appended += raw

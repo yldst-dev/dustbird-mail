@@ -5,6 +5,7 @@ import app.dustbird.mail.core.mime.MessageParser
 import app.dustbird.mail.core.mime.ParsedContent
 import app.dustbird.mail.core.model.Credentials
 import app.dustbird.mail.core.model.ServerEndpoint
+import com.sun.mail.iap.Argument
 import com.sun.mail.iap.Response
 import com.sun.mail.imap.IMAPFolder
 import com.sun.mail.imap.IMAPMessage
@@ -20,13 +21,16 @@ import com.sun.mail.imap.protocol.RFC822SIZE
 import com.sun.mail.imap.protocol.UID
 import java.io.ByteArrayOutputStream
 import java.io.IOException
+import java.io.OutputStream
 import java.time.Instant
 import java.util.Properties
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 import javax.mail.Flags
 import javax.mail.Folder
+import javax.mail.Message
 import javax.mail.MessagingException
+import javax.mail.Part
 import javax.mail.Session
 import javax.mail.internet.MimeMessage
 import javax.mail.search.HeaderTerm
@@ -80,24 +84,7 @@ class JakartaImapSession(private val store: IMAPStore) : ImapSession {
     override fun listUids(path: String, fromUid: Long, toUid: Long?): List<Long> {
         val folder = ensureOpen(path)
         val range = "$fromUid:${toUid ?: "*"}"
-        @Suppress("UNCHECKED_CAST")
-        return folder.doCommand { protocol ->
-            val responses = protocol.command("UID SEARCH UID $range", null)
-            val found = ArrayList<Long>()
-            for (index in responses.indices) {
-                val response = responses[index]
-                if (response is IMAPResponse && response.keyEquals("SEARCH")) {
-                    while (true) {
-                        val number = response.readLong()
-                        if (number < 0) break
-                        found += number
-                    }
-                    responses[index] = null
-                }
-            }
-            finish(protocol, responses)
-            found.filter { it >= fromUid && (toUid == null || it <= toUid) }.sorted()
-        } as List<Long>
+        return uidSearch(folder, "UID SEARCH UID $range", null).filter { it >= fromUid && (toUid == null || it <= toUid) }
     }
 
     override fun fetchMessages(path: String, uids: List<Long>, deliveryHeaders: List<String>): List<app.dustbird.mail.core.net.FetchedMessage> {
@@ -151,15 +138,101 @@ class JakartaImapSession(private val store: IMAPStore) : ImapSession {
         }
     }
 
-    private fun fetchWhole(message: IMAPMessage): ParsedContent {
-        val bytes = ByteArrayOutputStream().also { message.writeTo(it) }.toByteArray()
-        return MessageParser.contentStrict(MessageParser.parseRaw(bytes))
-    }
+    private fun fetchWhole(message: IMAPMessage): ParsedContent = MessageParser.contentStrict(wholeMessage(message))
 
     override fun setSeen(path: String, uid: Long, seen: Boolean) {
         val folder = ensureOpen(path)
         folder.getMessageByUID(uid)?.setFlag(Flags.Flag.SEEN, seen)
     }
+
+    override fun setFlag(path: String, uids: List<Long>, flag: MessageFlag, value: Boolean) {
+        val folder = ensureOpen(path)
+        val messages = messagesOf(folder, uids)
+        if (messages.isEmpty()) return
+        val jakartaFlag = when (flag) {
+            MessageFlag.SEEN -> Flags.Flag.SEEN
+            MessageFlag.FLAGGED -> Flags.Flag.FLAGGED
+            MessageFlag.ANSWERED -> Flags.Flag.ANSWERED
+        }
+        folder.setFlags(messages, Flags(jakartaFlag), value)
+    }
+
+    override fun move(path: String, uids: List<Long>, target: String) {
+        val folder = ensureOpen(path)
+        val messages = messagesOf(folder, uids)
+        if (messages.isEmpty()) return
+        val destination = store.getFolder(target)
+        if (store.hasCapability("MOVE")) {
+            folder.moveMessages(messages, destination)
+        } else {
+            folder.copyMessages(messages, destination)
+            remove(folder, messages)
+        }
+    }
+
+    override fun delete(path: String, uids: List<Long>) {
+        val folder = ensureOpen(path)
+        val messages = messagesOf(folder, uids)
+        if (messages.isNotEmpty()) remove(folder, messages)
+    }
+
+    override fun search(path: String, query: String): List<Long> {
+        val folder = ensureOpen(path)
+        val arguments = Argument()
+        if (query.any { it.code > 127 }) {
+            arguments.writeAtom("CHARSET")
+            arguments.writeAtom("UTF-8")
+        }
+        arguments.writeAtom("TEXT")
+        arguments.writeString(query, "UTF-8")
+        return uidSearch(folder, "UID SEARCH", arguments)
+    }
+
+    override fun fetchAttachment(path: String, uid: Long, index: Int, sink: OutputStream): Boolean {
+        val folder = ensureOpen(path)
+        val message = folder.getMessageByUID(uid) as? IMAPMessage ?: return false
+        val source: Part = try {
+            message.contentType
+            message
+        } catch (_: MessagingException) {
+            wholeMessage(message)
+        }
+        val part = MessageParser.attachmentPart(source, index) ?: return false
+        part.inputStream.use { it.copyTo(sink) }
+        return true
+    }
+
+    private fun uidSearch(folder: IMAPFolder, command: String, arguments: Argument?): List<Long> {
+        @Suppress("UNCHECKED_CAST")
+        return folder.doCommand { protocol ->
+            val responses = protocol.command(command, arguments)
+            val found = ArrayList<Long>()
+            for (index in responses.indices) {
+                val response = responses[index]
+                if (response is IMAPResponse && response.keyEquals("SEARCH")) {
+                    while (true) {
+                        val number = response.readLong()
+                        if (number < 0) break
+                        found += number
+                    }
+                    responses[index] = null
+                }
+            }
+            finish(protocol, responses)
+            found.sorted()
+        } as List<Long>
+    }
+
+    private fun messagesOf(folder: IMAPFolder, uids: List<Long>): Array<Message> =
+        if (uids.isEmpty()) emptyArray() else folder.getMessagesByUID(uids.toLongArray()).filterNotNull().toTypedArray()
+
+    private fun remove(folder: IMAPFolder, messages: Array<Message>) {
+        folder.setFlags(messages, Flags(Flags.Flag.DELETED), true)
+        if (store.hasCapability("UIDPLUS")) folder.expunge(messages) else folder.expunge()
+    }
+
+    private fun wholeMessage(message: IMAPMessage): MimeMessage =
+        MessageParser.parseRaw(ByteArrayOutputStream().also { message.writeTo(it) }.toByteArray())
 
     override fun append(path: String, raw: ByteArray, seen: Boolean, draft: Boolean): Long? {
         val folder = folders.getOrPut(path) { store.getFolder(path) as IMAPFolder }

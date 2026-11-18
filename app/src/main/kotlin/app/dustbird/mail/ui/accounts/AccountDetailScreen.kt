@@ -10,17 +10,13 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
@@ -28,8 +24,8 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -46,6 +42,8 @@ import app.dustbird.mail.ui.accounts.manage.Removal
 import app.dustbird.mail.ui.accounts.manage.ServerSection
 import app.dustbird.mail.ui.accounts.manage.reauthRequired
 import app.dustbird.mail.ui.appViewModel
+import app.dustbird.mail.ui.theme.FlatCard
+import app.dustbird.mail.ui.theme.groupedTopAppBarColors
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
 @Composable
@@ -60,11 +58,13 @@ fun AccountDetailRoute(accountId: Long, onBack: () -> Unit) {
     }
 
     Scaffold(
+        containerColor = MaterialTheme.colorScheme.surfaceContainer,
         topBar = {
             TopAppBar(
+                colors = groupedTopAppBarColors(),
                 title = { Text(account?.displayName ?: stringResource(R.string.accounts_detail_title), maxLines = 1, overflow = TextOverflow.Ellipsis) },
                 navigationIcon = {
-                    IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, stringResource(R.string.accounts_back)) }
+                    IconButton(onClick = onBack) { Icon(painterResource(R.drawable.ic_arrow_back), stringResource(R.string.accounts_back)) }
                 },
             )
         },
@@ -94,18 +94,17 @@ private fun AccountDetailContent(account: MailAccount, accentIndex: Int?, viewMo
     val removal by viewModel.removal.collectAsStateWithLifecycle()
     val reauthRequired = account.reauthRequired(syncState)
 
-    Column(Modifier.widthIn(max = 640.dp).fillMaxSize().verticalScroll(rememberScrollState())) {
+    Column(Modifier.widthIn(max = 640.dp).fillMaxSize().verticalScroll(rememberScrollState()).padding(bottom = 24.dp)) {
         if (reauthRequired) {
-            Surface(color = MaterialTheme.colorScheme.errorContainer, contentColor = MaterialTheme.colorScheme.onErrorContainer) {
-                Column(Modifier.padding(horizontal = 16.dp, vertical = 20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Text(stringResource(R.string.accounts_reauth_title), style = MaterialTheme.typography.titleLargeEmphasized, fontWeight = FontWeight.Bold)
+            FlatCard(Modifier.padding(start = 16.dp, end = 16.dp, top = 8.dp), color = MaterialTheme.colorScheme.errorContainer) {
+                Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text(stringResource(R.string.accounts_reauth_title), style = MaterialTheme.typography.titleLargeEmphasized)
                     Text(stringResource(R.string.accounts_reauth_body))
                     ReauthForm(reauth, viewModel::reauthenticate)
                 }
             }
         }
         BasicsSection(account)
-        HorizontalDivider()
         ConnectionSection(
             account = account,
             syncState = syncState,
@@ -115,13 +114,9 @@ private fun AccountDetailContent(account: MailAccount, accentIndex: Int?, viewMo
             onRecheck = viewModel::recheck,
             onReauth = viewModel::reauthenticate,
         )
-        HorizontalDivider()
         ServerSection(account)
-        HorizontalDivider()
         IdentitiesSection(account, accentIndex, identities, appDefaultId, testSend, viewModel::testSend)
-        HorizontalDivider()
         FolderRolesSection(account, folders)
-        HorizontalDivider()
         DataSection(account, removal, viewModel::remove, viewModel::cancelRemoval)
     }
 }

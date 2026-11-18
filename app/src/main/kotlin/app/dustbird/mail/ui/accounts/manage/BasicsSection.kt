@@ -22,6 +22,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import app.dustbird.mail.R
@@ -76,7 +77,22 @@ fun BasicsSection(account: MailAccount) {
             Modifier.fillMaxWidth().heightIn(min = 48.dp).toggleable(
                 value = notifications,
                 role = Role.Switch,
-                onValueChange = { notifications = it; note = null },
+                onValueChange = { enabled ->
+                    notifications = enabled
+                    note = null
+                    scope.launch {
+                        container.accounts.updateAccount(
+                            accountId = account.id,
+                            displayName = account.displayName,
+                            label = account.label,
+                            username = account.username,
+                            imap = account.imap,
+                            smtp = account.smtp,
+                            syncMode = account.syncMode,
+                            notificationsEnabled = enabled,
+                        )
+                    }
+                },
             ),
             horizontalArrangement = Arrangement.spacedBy(12.dp),
             verticalAlignment = Alignment.CenterVertically,

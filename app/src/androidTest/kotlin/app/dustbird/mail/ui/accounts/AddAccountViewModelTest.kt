@@ -7,6 +7,12 @@ import androidx.room.Room
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import app.dustbird.mail.AppContainer
+import app.dustbird.mail.R
+import app.dustbird.mail.agent.callItem
+import app.dustbird.mail.core.agent.AgentBackendException
+import app.dustbird.mail.core.agent.AgentItem
+import app.dustbird.mail.core.agent.AgentRequest
+import app.dustbird.mail.core.agent.BackendFailure
 import app.dustbird.mail.core.identity.Rejection
 import app.dustbird.mail.core.model.FolderRole
 import app.dustbird.mail.core.model.StageState
@@ -23,6 +29,7 @@ import app.dustbird.mail.sync.SyncOutcome
 import app.dustbird.mail.ui.accounts.add.AddAccountUiState
 import app.dustbird.mail.ui.accounts.add.AddAccountViewModel
 import app.dustbird.mail.ui.accounts.add.AddStep
+import app.dustbird.mail.ui.accounts.add.AssistState
 import app.dustbird.mail.ui.accounts.add.FormField
 import app.dustbird.mail.ui.accounts.add.FormRules
 import app.dustbird.mail.ui.accounts.add.FormValues
@@ -32,6 +39,8 @@ import app.dustbird.mail.ui.accounts.add.Stage
 import app.dustbird.mail.ui.accounts.add.rolePrompts
 import java.net.ConnectException
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.CopyOnWriteArrayList
+import org.json.JSONObject
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
@@ -82,6 +91,8 @@ class AddAccountViewModelTest {
     private val secret = "app-secret"
     private lateinit var db: MailDatabase
     private lateinit var container: AppContainer
+    private val agentRequests = CopyOnWriteArrayList<AgentRequest>()
+    private var agentReply: (AgentRequest) -> List<AgentItem.Model> = { error("the agent is not used in this test") }
 
     @Before
     fun setUp() {
@@ -93,6 +104,10 @@ class AddAccountViewModelTest {
             smtpSender = SmtpSender { _, _, _ -> error("sending is not allowed in this test") },
             credentials = MemoryCredentialStore(),
             db = db,
+            agentBackend = { request, _ ->
+                agentRequests += request
+                agentReply(request)
+            },
         )
     }
 
@@ -292,6 +307,107 @@ class AddAccountViewModelTest {
         assertEquals("", restored.fields.password.text.toString())
         assertEquals("", restored.fields.address.text.toString())
         assertTrue(handle.keys().none { handle.get<Any?>(it).toString().contains(secret) })
+    }
+
+    @Test
+    fun sentenceEntryFillsOnlyValidValuesAndNeverTouchesThePassword() {
+        val viewModel = newViewModel()
+        viewModel.openForm(Providers.CUSTOM.id)
+        onMain { viewModel.fields.password.setTextAndPlaceCursorAtEnd(secret) }
+        agentReply = {
+            listOf(
+                callItem(
+                    "call-1", "fill_account_form",
+                    JSONObject()
+                        .put("address", "kim@corp.example")
+                        .put("display_name", "회사\n메일")
+                        .put("label", "회사")
+                        .put("username", JSONObject.NULL)
+                        .put("imap_host", "imap.corp.example")
+                        .put("imap_port", 993)
+                        .put("imap_security", "TLS")
+                        .put("smtp_host", "http://smtp.corp.example")
+                        .put("smtp_port", 70000)
+                        .put("smtp_security", "PLAIN")
+                        .put("password", "leaked-by-the-model"),
+                ),
+            )
+        }
+
+        onMain { viewModel.assist("  회사 메일 kim@corp.example, 받는 서버 imap.corp.example 993$secret  ") }
+        val done = assertIs<AssistState.Done>(viewModel.await { it.assist is AssistState.Done }.assist)
+
+        val request = agentRequests.single()
+        assertEquals(listOf(AgentItem.User("회사 메일 kim@corp.example, 받는 서버 imap.corp.example 993")), request.items)
+        assertEquals(listOf("fill_account_form"), request.tools.map { it.name })
+        assertFalse("password" in request.tools.single().parameters)
+        assertTrue("Never put a password" in request.instructions)
+        assertEquals(
+            listOf(R.string.add_account_field_address, R.string.add_account_field_display_name, R.string.add_account_field_label, R.string.add_account_section_imap),
+            done.filled,
+        )
+        val values = viewModel.fields.values()
+        assertEquals("kim@corp.example", values.address)
+        assertEquals("회사 메일", values.displayName)
+        assertEquals("회사", values.label)
+        assertEquals("imap.corp.example", values.imapHost)
+        assertEquals("993", values.imapPort)
+        assertEquals(TransportSecurity.TLS, values.imapSecurity)
+        assertEquals("", values.smtpHost)
+        assertEquals("", values.smtpPort)
+        assertEquals(TransportSecurity.STARTTLS, values.smtpSecurity)
+        assertEquals(secret, values.password)
+        assertTrue(viewModel.fields.advancedOpen)
+        assertEquals(AddStep.FORM, viewModel.state.value.step)
+        val log = runBlocking { db.agent().observeLog(10).first() }.single()
+        assertEquals("fill_account_form", log.tool)
+        assertEquals("", log.summary)
+    }
+
+    @Test
+    fun sentenceEntryFailureIsReportedAndLeavesTheFormAlone() {
+        val viewModel = newViewModel()
+        viewModel.openForm()
+        agentReply = { throw AgentBackendException(BackendFailure.NOT_CONFIGURED, "off") }
+
+        onMain { viewModel.assist("gmail user@example.com") }
+        assertEquals(AssistState.Failed(BackendFailure.NOT_CONFIGURED), viewModel.await { it.assist is AssistState.Failed }.assist)
+        assertEquals("", viewModel.fields.values().address)
+        assertEquals("imap.gmail.com", viewModel.fields.values().imapHost)
+
+        agentReply = { emptyList() }
+        onMain { viewModel.dismissAssist() }
+        assertEquals(AssistState.Idle, viewModel.state.value.assist)
+        onMain { viewModel.assist("gmail user@example.com") }
+        assertEquals(AssistState.Failed(BackendFailure.INCOMPLETE), viewModel.await { it.assist is AssistState.Failed }.assist)
+        assertTrue(runBlocking { db.agent().observeLog(10).first() }.isEmpty())
+    }
+
+    @Test
+    fun sentenceEntryCannotMoveAKnownServiceToAnotherServer() {
+        val viewModel = newViewModel()
+        viewModel.openForm()
+        agentReply = {
+            listOf(
+                callItem(
+                    "call-1", "fill_account_form",
+                    JSONObject().put("address", "user@example.com").put("imap_host", "imap.other.example").put("smtp_port", 25).put("smtp_security", "TLS"),
+                ),
+            )
+        }
+
+        onMain { viewModel.assist("user@example.com 서버는 imap.other.example") }
+        val done = assertIs<AssistState.Done>(viewModel.await { it.assist is AssistState.Done }.assist)
+
+        assertEquals(listOf(R.string.add_account_field_address), done.filled)
+        assertTrue("leave every imap_* and smtp_* field out" in agentRequests.single().instructions)
+        val values = viewModel.fields.values()
+        assertEquals("user@example.com", values.address)
+        assertEquals("imap.gmail.com", values.imapHost)
+        assertEquals("465", values.smtpPort)
+        assertFalse(viewModel.fields.advancedOpen)
+        onMain { viewModel.dismissAssist() }
+        assertEquals(done, viewModel.state.value.assist)
     }
 
     @Test

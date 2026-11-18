@@ -1,6 +1,7 @@
 package app.dustbird.mail.ui.accounts.add
 
 import androidx.annotation.StringRes
+import androidx.compose.ui.semantics.role
 import app.dustbird.mail.R
 import app.dustbird.mail.core.identity.Rejection
 import app.dustbird.mail.core.model.FolderRole
@@ -12,12 +13,14 @@ class ServiceTexts(
     @StringRes val hint: Int,
     @StringRes val secret: Int,
     val checklist: List<Int>,
+    val notes: Set<Int>,
 )
 
 fun serviceTexts(providerId: String): ServiceTexts = when (providerId) {
     Providers.ICLOUD.id -> ServiceTexts(
         R.string.add_account_service_icloud, R.string.add_account_service_icloud_hint, R.string.add_account_secret_icloud,
         listOf(R.string.add_account_prepare_icloud_1, R.string.add_account_prepare_icloud_2, R.string.add_account_prepare_icloud_3),
+        setOf(R.string.add_account_prepare_icloud_3),
     )
     Providers.GMAIL.id -> ServiceTexts(
         R.string.add_account_service_gmail, R.string.add_account_service_gmail_hint, R.string.add_account_secret_gmail,
@@ -25,6 +28,7 @@ fun serviceTexts(providerId: String): ServiceTexts = when (providerId) {
             R.string.add_account_prepare_gmail_1, R.string.add_account_prepare_gmail_2, R.string.add_account_prepare_gmail_3,
             R.string.add_account_prepare_gmail_4, R.string.add_account_prepare_gmail_5,
         ),
+        setOf(R.string.add_account_prepare_gmail_1, R.string.add_account_prepare_gmail_4, R.string.add_account_prepare_gmail_5),
     )
     Providers.NAVER.id -> ServiceTexts(
         R.string.add_account_service_naver, R.string.add_account_service_naver_hint, R.string.add_account_secret_naver,
@@ -32,10 +36,12 @@ fun serviceTexts(providerId: String): ServiceTexts = when (providerId) {
             R.string.add_account_prepare_naver_1, R.string.add_account_prepare_naver_2, R.string.add_account_prepare_naver_3,
             R.string.add_account_prepare_naver_4, R.string.add_account_prepare_naver_5,
         ),
+        setOf(R.string.add_account_prepare_naver_4, R.string.add_account_prepare_naver_5),
     )
     else -> ServiceTexts(
         R.string.add_account_service_custom, R.string.add_account_service_custom_hint, R.string.add_account_secret_custom,
         listOf(R.string.add_account_prepare_custom_1, R.string.add_account_prepare_custom_2, R.string.add_account_prepare_custom_3),
+        setOf(R.string.add_account_prepare_custom_3),
     )
 }
 

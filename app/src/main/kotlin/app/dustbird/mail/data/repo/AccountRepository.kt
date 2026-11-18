@@ -1,5 +1,10 @@
 package app.dustbird.mail.data.repo
 
+import app.dustbird.mail.data.AttachmentFiles
+import app.dustbird.mail.core.send.SendState
+import java.io.File
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import androidx.room.withTransaction
 import app.dustbird.mail.core.identity.AccountRules
 import app.dustbird.mail.core.identity.Addresses
@@ -64,6 +69,7 @@ class AccountRepository(
     private val db: MailDatabase,
     private val credentials: CredentialStore,
     private val settings: SettingsRepository,
+    private val files: AttachmentFiles? = null,
     private val onRemoved: (Long) -> Unit,
 ) {
     val accounts: Flow<List<MailAccount>> = db.accounts().observeAll().map { list -> list.map { it.toModel() } }
@@ -207,8 +213,18 @@ class AccountRepository(
         val drafts = db.drafts().countForAccount(accountId)
         if (!force && (unsettled > 0 || drafts > 0)) return RemoveAccountResult.Blocked(unsettled, drafts)
         val ownIdentityIds = db.identities().forAccount(accountId).map { it.id }
+        val rawFiles = db.outbox().byAccountAndStates(accountId, SendState.entries).mapNotNull { it.rawPath }
+        val draftIds = db.drafts().idsForAccount(accountId)
+        val messageIds = db.messages().idsForAccount(accountId)
         db.accounts().delete(accountId)
         credentials.delete(accountId)
+        files?.let { store ->
+            withContext(Dispatchers.IO) {
+                rawFiles.forEach { File(it).delete() }
+                draftIds.forEach(store::clearDraft)
+                store.clearDownloads(messageIds)
+            }
+        }
         if (settings.appDefaultIdentityId.first() in ownIdentityIds) {
             settings.setAppDefaultIdentity(db.identities().getAll().firstOrNull { it.isAccountDefault }?.id)
         }

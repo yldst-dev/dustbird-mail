@@ -5,13 +5,13 @@ import org.jsoup.nodes.Element
 import org.jsoup.safety.Cleaner
 import org.jsoup.safety.Safelist
 
-data class SanitizedHtml(val body: String, val blockedRemoteImages: Int)
+data class SanitizedHtml(val body: String, val blockedRemoteImages: Int, val unshownImages: Int = 0)
 
 object HtmlSanitizer {
-    private val dropped = "script, style, iframe, frame, frameset, object, embed, applet, form, input, button, textarea, select, " +
+    private val dropped = "script, style, iframe, frame, frameset, object, embed, applet, input, textarea, select, " +
         "option, link, meta, base, svg, math, audio, video, source, track, canvas, noscript, template, dialog, head, title"
     private val allowedStyleProperties = setOf(
-        "color", "background-color", "font-family", "font-size", "font-style", "font-weight", "text-align", "text-decoration",
+        "color", "background", "background-color", "display", "border-radius", "border-collapse", "font-family", "font-size", "font-style", "font-weight", "text-align", "text-decoration",
         "line-height", "margin", "margin-top", "margin-bottom", "margin-left", "margin-right", "padding", "padding-top",
         "padding-bottom", "padding-left", "padding-right", "border", "border-top", "border-bottom", "border-left",
         "border-right", "border-color", "border-width", "border-style", "width", "height", "max-width", "vertical-align",
@@ -22,10 +22,12 @@ object HtmlSanitizer {
         val source = Jsoup.parse(html)
         source.select(dropped).remove()
         var blocked = 0
+        var unshown = 0
         source.select("img").forEach { image ->
             val src = image.attr("src").trim()
-            if (allowRemoteImages && src.startsWith("https://", ignoreCase = true)) return@forEach
-            if (src.isNotEmpty()) blocked++
+            val remote = src.startsWith("https://", ignoreCase = true)
+            if (allowRemoteImages && remote) return@forEach
+            if (remote) blocked++ else if (src.isNotEmpty()) unshown++
             image.removeAttr("src")
         }
         val cleaned = Cleaner(safelist()).clean(source)
@@ -34,7 +36,7 @@ object HtmlSanitizer {
             if (alt.isBlank()) image.remove() else image.replaceWith(org.jsoup.nodes.TextNode(alt))
         }
         cleaned.allElements.forEach(::filterStyle)
-        return SanitizedHtml(cleaned.body().html(), blocked)
+        return SanitizedHtml(cleaned.body().html(), blocked, unshown)
     }
 
     private fun safelist(): Safelist = Safelist.relaxed()

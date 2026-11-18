@@ -14,12 +14,14 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import app.dustbird.mail.R
+import app.dustbird.mail.ui.theme.capsuleShape
 
 @Composable
 internal fun LinkDialog(target: LinkTarget, onOpen: () -> Unit, onDismiss: () -> Unit) {
     val canOpen = LinkPolicy.canOpen(target.url)
     val shown = target.shownText?.takeIf { LinkPolicy.differs(it, target.url) }
     AlertDialog(
+        shape = capsuleShape(),
         onDismissRequest = onDismiss,
         title = { Text(stringResource(if (canOpen) R.string.message_link_title else R.string.message_link_refused_title)) },
         text = {

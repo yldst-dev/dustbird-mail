@@ -22,6 +22,7 @@ import app.dustbird.mail.core.sync.FolderSync
 import app.dustbird.mail.core.sync.LocalFlags
 import app.dustbird.mail.data.Codec
 import app.dustbird.mail.data.db.FolderEntity
+import app.dustbird.mail.data.db.ListState
 import app.dustbird.mail.data.db.MailDatabase
 import app.dustbird.mail.data.db.MessageEntity
 import app.dustbird.mail.data.db.NotifiedEntity
@@ -87,6 +88,7 @@ class RoomFolderStore(
     override fun insert(messages: List<FetchedMessage>) {
         val validity = sync.folder(folderId).uidValidity
         sync.insertMessages(messages.map { it.toEntity(accountId, folderId, validity) })
+        messages.map { it.uid }.chunked(500).forEach { sync.promote(folderId, it) }
     }
 
     override fun updateFlags(uid: Long, flags: LocalFlags) = sync.setFlags(folderId, uid, flags.seen, flags.answered, flags.flagged)
@@ -136,12 +138,13 @@ class SyncService(
     private val accounts: AccountRepository,
     private val notifier: MailNotifier,
     private val folderSync: FolderSync = FolderSync(),
+    private val onNewMail: suspend (accountId: Long, messageRowIds: List<Long>) -> Unit = { _, _ -> },
 ) {
     private val locks = ConcurrentHashMap<Long, Mutex>()
     private val _state = MutableStateFlow<Map<Long, AccountSyncState>>(emptyMap())
     val state: StateFlow<Map<Long, AccountSyncState>> = _state.asStateFlow()
 
-    private val syncedRoles = listOf(FolderRole.INBOX, FolderRole.SENT, FolderRole.DRAFTS, FolderRole.SPAM)
+    private val syncedRoles = listOf(FolderRole.INBOX, FolderRole.SENT, FolderRole.DRAFTS, FolderRole.SPAM, FolderRole.ARCHIVE, FolderRole.TRASH)
 
     suspend fun syncAll(): Map<Long, SyncOutcome> = coroutineScope {
         db.accounts().getAll().map { account -> async { account.id to syncAccount(account.id) } }.awaitAll().toMap()
@@ -177,9 +180,31 @@ class SyncService(
 
     suspend fun loadOlder(accountId: Long, role: FolderRole): Int {
         val folder = db.folders().byRole(accountId, role) ?: return 0
-        val delivery = deliveryHeaders(accountId)
-        return access.use(accountId) { session, _ ->
-            folderSync.loadOlder(session, folder.path, RoomFolderStore(db, folder.id, accountId), delivery)
+        return loadOlderFolder(folder.id)
+    }
+
+    suspend fun loadOlderFolder(folderId: Long): Int {
+        val folder = db.folders().get(folderId) ?: return 0
+        val delivery = deliveryHeaders(folder.accountId)
+        return access.use(folder.accountId) { session, _ ->
+            folderSync.loadOlder(session, folder.path, RoomFolderStore(db, folder.id, folder.accountId), delivery)
+        }
+    }
+
+    suspend fun syncFolder(folderId: Long): Boolean {
+        val folder = db.folders().get(folderId) ?: return false
+        val delivery = deliveryHeaders(folder.accountId)
+        return locks.getOrPut(folder.accountId) { Mutex() }.withLock {
+            try {
+                access.use(folder.accountId) { session, _ ->
+                    withContext(Dispatchers.IO) { folderSync.sync(session, folder.path, RoomFolderStore(db, folder.id, folder.accountId), delivery) }
+                }
+                true
+            } catch (error: kotlinx.coroutines.CancellationException) {
+                throw error
+            } catch (_: Exception) {
+                false
+            }
         }
     }
 
@@ -200,7 +225,6 @@ class SyncService(
 
     private suspend fun run(accountId: Long) {
         val delivery = deliveryHeaders(accountId)
-        val notifiable = ArrayList<Pair<FolderEntity, List<FetchedMessage>>>()
         access.use(accountId) { session, account ->
             val listed = session.listFolders()
             persistFolders(accountId, listed)
@@ -209,7 +233,7 @@ class SyncService(
                 val result = withContext(Dispatchers.IO) {
                     folderSync.sync(session, folder.path, RoomFolderStore(db, folder.id, accountId), delivery)
                 }
-                if (role == FolderRole.INBOX && result.notifiable.isNotEmpty()) notifiable += folder to result.notifiable
+                if (role == FolderRole.INBOX) announce(accountId, folder, result.notifiable.filterNot { it.flags.seen })
                 if (role == FolderRole.SENT) reconcileSent(accountId)
             }
             val inbox = db.folders().byRole(accountId, FolderRole.INBOX)
@@ -219,7 +243,19 @@ class SyncService(
             }
             if (account.needsReauth) db.accounts().setNeedsReauth(accountId, false)
         }
-        publishNotifications(accountId, notifiable)
+        notifier.reauthResolved(accountId)
+        sweepNotifications(accountId)
+    }
+
+    suspend fun sweepNotifications(accountId: Long) = notifier.sweep(accountId) { ids ->
+        db.messages().byIds(ids).filter { !it.seen && it.listState == ListState.NORMAL }.map { it.id }.toSet()
+    }
+
+    private suspend fun announce(accountId: Long, folder: FolderEntity, fresh: List<FetchedMessage>) {
+        if (fresh.isEmpty()) return
+        publishNotifications(accountId, listOf(folder to fresh))
+        val ids = db.messages().byUids(folder.id, fresh.map { it.uid }).map { it.id }
+        if (ids.isNotEmpty()) onNewMail(accountId, ids)
     }
 
     private suspend fun persistFolders(accountId: Long, listed: List<FolderInfo>) {
@@ -281,9 +317,10 @@ class SyncService(
     }
 
     private suspend fun markNeedsReauth(accountId: Long) {
+        val known = db.accounts().get(accountId)?.needsReauth == true
         accounts.markNeedsReauth(accountId)
         accounts.updateStages(accountId) { it.copy(imapAuth = StageState.FAILED) }
-        db.accounts().get(accountId)?.let { notifier.reauthRequired(it.toModel()) }
+        if (!known) db.accounts().get(accountId)?.let { notifier.reauthRequired(it.toModel()) }
     }
 
     private suspend fun deliveryHeaders(accountId: Long): List<String> {

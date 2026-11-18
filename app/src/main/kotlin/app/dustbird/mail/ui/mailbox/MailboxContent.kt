@@ -13,17 +13,18 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.FilledTonalButton
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
+import androidx.compose.material3.pulltorefresh.PullToRefreshDefaults
+import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
@@ -31,22 +32,49 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import app.dustbird.mail.R
 import app.dustbird.mail.core.net.ConnectFailure
 import app.dustbird.mail.data.repo.MailboxScope
+import app.dustbird.mail.ui.theme.CapsuleGap
+import app.dustbird.mail.ui.theme.capsuleShape
 import java.time.Instant
+import kotlinx.coroutines.delay
+import app.dustbird.mail.ui.theme.Pill
+import app.dustbird.mail.data.repo.MessageFilter
+import app.dustbird.mail.core.model.FolderRole
+import androidx.compose.ui.res.painterResource
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.material3.SwipeToDismissBoxDefaults
+import androidx.compose.material3.SwipeToDismissBoxState
+import androidx.compose.material3.SwipeToDismissBoxValue
+import androidx.compose.material3.SwipeToDismissBox
+import androidx.compose.material3.Icon
+import androidx.compose.material3.FilterChip
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.background
+import androidx.compose.runtime.SideEffect
 
-@OptIn(ExperimentalMaterial3Api::class)
+class MailboxRowActions(
+    val onOpen: (Long) -> Unit,
+    val onToggle: (Long) -> Unit,
+    val onArchive: (Long) -> Unit,
+    val onDelete: (Long) -> Unit,
+    val onFilter: (MessageFilter) -> Unit,
+)
+
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun MailboxPane(
     state: MailboxUiState,
     online: Boolean,
     listState: LazyListState,
     selectable: Boolean,
-    onOpenMessage: (Long) -> Unit,
+    actions: MailboxRowActions,
     onRefresh: () -> Unit,
     onLoadOlder: () -> Unit,
     onOpenAccounts: () -> Unit,
@@ -57,6 +85,13 @@ fun MailboxPane(
     val now = remember(state.messages) { Instant.now() }
     val indexed = remember(state.accounts) { state.accounts.withIndex().associateBy { it.value.id } }
     val showAccounts = state.accounts.size > 1 && state.scope == MailboxScope.Unified
+    val selecting = state.selection.isNotEmpty()
+    val role = state.scopeRole()
+    val swipeArchive = !selecting && role == FolderRole.INBOX
+    val swipeDelete = !selecting && role != FolderRole.TRASH
+    val animations = rememberAnimationsEnabled()
+    val effects = MaterialTheme.motionScheme.defaultEffectsSpec<Float>()
+    val spatial = MaterialTheme.motionScheme.defaultSpatialSpec<IntOffset>()
 
     Column(modifier) {
         if (!online) OfflineNotice()
@@ -70,12 +105,46 @@ fun MailboxPane(
                 onOpenAccounts = onOpenAccounts,
             )
         }
-        PullToRefreshBox(isRefreshing = state.refreshing, onRefresh = onRefresh, modifier = Modifier.weight(1f)) {
-            LazyColumn(Modifier.fillMaxSize(), listState, contentPadding = PaddingValues(bottom = 96.dp)) {
+        if (state.accounts.isNotEmpty()) FilterRow(state.filter, actions.onFilter)
+        val refreshState = rememberPullToRefreshState()
+        PullToRefreshBox(
+            isRefreshing = state.refreshing,
+            onRefresh = onRefresh,
+            modifier = Modifier.weight(1f),
+            state = refreshState,
+            indicator = {
+                PullToRefreshDefaults.LoadingIndicator(
+                    state = refreshState,
+                    isRefreshing = state.refreshing,
+                    modifier = Modifier.align(Alignment.TopCenter),
+                    elevation = 0.dp,
+                )
+            },
+        ) {
+            val firstId = state.messages?.firstOrNull()?.id
+            val shownFirst = remember { arrayOf(firstId) }
+            SideEffect {
+                if (shownFirst[0] != firstId) {
+                    shownFirst[0] = firstId
+                    if (listState.firstVisibleItemIndex == 0 && listState.firstVisibleItemScrollOffset == 0) listState.requestScrollToItem(0)
+                }
+            }
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                state = listState,
+                contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 96.dp),
+                verticalArrangement = Arrangement.spacedBy(CapsuleGap),
+            ) {
                 if (body == MailboxBody.MESSAGES) {
                     items(state.messages.orEmpty(), key = { it.id }) { message ->
                         val account = indexed[message.accountId]
-                        Column {
+                        SwipeRow(
+                            archive = swipeArchive,
+                            delete = swipeDelete,
+                            onArchive = { actions.onArchive(message.id) },
+                            onDelete = { actions.onDelete(message.id) },
+                            modifier = if (animations) Modifier.animateItem(effects, spatial, effects) else Modifier,
+                        ) {
                             MessageRow(
                                 message = message,
                                 time = formatter.format(message.sortDate, now),
@@ -83,16 +152,24 @@ fun MailboxPane(
                                 accountIndex = account?.index ?: 0,
                                 identityLabels = state.identityLabels,
                                 selected = if (selectable) message.id == state.selectedId else null,
-                                onClick = { onOpenMessage(message.id) },
+                                onClick = { if (selecting) actions.onToggle(message.id) else actions.onOpen(message.id) },
+                                checked = message.id in state.selection,
+                                onLongClick = { actions.onToggle(message.id) },
                             )
-                            HorizontalDivider(Modifier.padding(horizontal = 16.dp))
                         }
                     }
-                    item(key = "older") { OlderAction(state, onLoadOlder) }
+                    item(key = "older") {
+                        OlderAction(state, onLoadOlder, if (animations) Modifier.animateItem(effects, spatial, effects) else Modifier)
+                    }
                 } else {
                     item(key = "state") {
                         Box(Modifier.fillParentMaxSize(), contentAlignment = Alignment.Center) {
-                            StateMessage(body, onRefresh, onOpenAccounts)
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                StateMessage(body, onRefresh, onOpenAccounts)
+                                if (body == MailboxBody.EMPTY && state.filter == MessageFilter.ALL && (state.hasMore || state.loadingOlder)) {
+                                    OlderAction(state, onLoadOlder)
+                                }
+                            }
                         }
                     }
                 }
@@ -101,10 +178,75 @@ fun MailboxPane(
     }
 }
 
+@Composable
+private fun FilterRow(filter: MessageFilter, onFilter: (MessageFilter) -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp).padding(bottom = 4.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        listOf(
+            MessageFilter.ALL to R.string.mailbox_filter_all,
+            MessageFilter.UNREAD to R.string.mailbox_filter_unread,
+            MessageFilter.FLAGGED to R.string.mailbox_filter_starred,
+        ).forEach { (value, label) ->
+            FilterChip(selected = filter == value, onClick = { onFilter(value) }, label = { Text(stringResource(label)) }, shape = Pill)
+        }
+    }
+}
+
+@Composable
+private fun SwipeRow(
+    archive: Boolean,
+    delete: Boolean,
+    onArchive: () -> Unit,
+    onDelete: () -> Unit,
+    modifier: Modifier = Modifier,
+    content: @Composable () -> Unit,
+) {
+    val threshold = SwipeToDismissBoxDefaults.positionalThreshold
+    val dismiss = remember { SwipeToDismissBoxState(SwipeToDismissBoxValue.Settled, threshold) }
+    LaunchedEffect(dismiss.currentValue) {
+        if (dismiss.currentValue != SwipeToDismissBoxValue.Settled) {
+            delay(700)
+            dismiss.reset()
+        }
+    }
+    SwipeToDismissBox(
+        state = dismiss,
+        modifier = modifier,
+        enableDismissFromStartToEnd = archive,
+        enableDismissFromEndToStart = delete,
+        backgroundContent = {
+            val toEnd = dismiss.dismissDirection == SwipeToDismissBoxValue.StartToEnd
+            val scheme = MaterialTheme.colorScheme
+            Box(
+                Modifier
+                    .fillMaxSize()
+                    .background(if (toEnd) scheme.tertiaryContainer else scheme.errorContainer, capsuleShape())
+                    .padding(horizontal = 28.dp),
+                contentAlignment = if (toEnd) Alignment.CenterStart else Alignment.CenterEnd,
+            ) {
+                Icon(
+                    painter = painterResource(if (toEnd) R.drawable.ic_archive else R.drawable.ic_delete),
+                    contentDescription = null,
+                    tint = if (toEnd) scheme.onTertiaryContainer else scheme.onErrorContainer,
+                )
+            }
+        },
+        onDismiss = { value ->
+            when (value) {
+                SwipeToDismissBoxValue.StartToEnd -> onArchive()
+                SwipeToDismissBoxValue.EndToStart -> onDelete()
+                SwipeToDismissBoxValue.Settled -> Unit
+            }
+        },
+    ) { content() }
+}
+
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
-private fun OlderAction(state: MailboxUiState, onLoadOlder: () -> Unit) {
-    Box(Modifier.fillMaxWidth().heightIn(min = 64.dp), contentAlignment = Alignment.Center) {
+private fun OlderAction(state: MailboxUiState, onLoadOlder: () -> Unit, modifier: Modifier = Modifier) {
+    Box(modifier.fillMaxWidth().heightIn(min = 64.dp), contentAlignment = Alignment.Center) {
         when {
             state.loadingOlder -> Row(
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -167,7 +309,11 @@ private fun StateMessage(body: MailboxBody, onRetry: () -> Unit, onOpenAccounts:
 
 @Composable
 private fun OfflineNotice() {
-    Surface(color = MaterialTheme.colorScheme.surfaceContainerHigh, modifier = Modifier.fillMaxWidth()) {
+    Surface(
+        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+        shape = capsuleShape(),
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
+    ) {
         Text(
             text = stringResource(R.string.mailbox_offline_notice),
             style = MaterialTheme.typography.bodyMedium,
@@ -185,7 +331,12 @@ private fun ProblemBanner(
     onRetry: () -> Unit,
     onOpenAccounts: () -> Unit,
 ) {
-    Surface(color = MaterialTheme.colorScheme.errorContainer, contentColor = MaterialTheme.colorScheme.onErrorContainer, modifier = Modifier.fillMaxWidth()) {
+    Surface(
+        color = MaterialTheme.colorScheme.errorContainer,
+        contentColor = MaterialTheme.colorScheme.onErrorContainer,
+        shape = capsuleShape(),
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
+    ) {
         Column(Modifier.padding(start = 16.dp, end = 8.dp, top = 12.dp, bottom = 4.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Text(
                 text = stringResource(if (allFailed) R.string.mailbox_problem_title_all else R.string.mailbox_problem_title_some),
@@ -199,9 +350,9 @@ private fun ProblemBanner(
                 }
             }
             FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                TextButton(onClick = onRetry) { Text(stringResource(R.string.mailbox_retry), fontWeight = FontWeight.SemiBold) }
+                TextButton(onClick = onRetry) { Text(stringResource(R.string.mailbox_retry)) }
                 if (problems.any { it.failure == null }) {
-                    TextButton(onClick = onOpenAccounts) { Text(stringResource(R.string.mailbox_open_accounts), fontWeight = FontWeight.SemiBold) }
+                    TextButton(onClick = onOpenAccounts) { Text(stringResource(R.string.mailbox_open_accounts)) }
                 }
             }
         }

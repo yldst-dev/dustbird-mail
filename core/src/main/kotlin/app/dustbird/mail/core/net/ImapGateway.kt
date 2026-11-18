@@ -5,6 +5,7 @@ import app.dustbird.mail.core.mime.ParsedContent
 import app.dustbird.mail.core.mime.ParsedHeaders
 import app.dustbird.mail.core.model.Credentials
 import app.dustbird.mail.core.model.ServerEndpoint
+import java.io.OutputStream
 import java.time.Instant
 
 data class FolderStatus(val uidValidity: Long, val uidNext: Long, val exists: Int)
@@ -27,6 +28,8 @@ data class FetchedMessage(
     val hasAttachment: Boolean,
 )
 
+enum class MessageFlag { SEEN, FLAGGED, ANSWERED }
+
 interface ImapSession : AutoCloseable {
     fun capabilities(): Set<String>
     fun listFolders(): List<FolderInfo>
@@ -36,6 +39,11 @@ interface ImapSession : AutoCloseable {
     fun fetchFlags(path: String, uids: List<Long>): Map<Long, MessageFlags>
     fun fetchContent(path: String, uid: Long): ParsedContent?
     fun setSeen(path: String, uid: Long, seen: Boolean)
+    fun setFlag(path: String, uids: List<Long>, flag: MessageFlag, value: Boolean)
+    fun move(path: String, uids: List<Long>, target: String)
+    fun delete(path: String, uids: List<Long>)
+    fun search(path: String, query: String): List<Long>
+    fun fetchAttachment(path: String, uid: Long, index: Int, sink: OutputStream): Boolean
     fun append(path: String, raw: ByteArray, seen: Boolean, draft: Boolean = false): Long?
     fun findByMessageId(path: String, messageId: String): List<Long>
     fun removeByMessageId(path: String, messageId: String): Int

@@ -8,8 +8,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -27,6 +25,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import app.dustbird.mail.R
@@ -41,6 +40,7 @@ private val entries = listOf(
     LicenseEntry(R.string.licenses_jsoup, listOf("jsoup-MIT.txt")),
     LicenseEntry(R.string.licenses_androidx, listOf("apache-2.0.txt")),
     LicenseEntry(R.string.licenses_kotlin, listOf("apache-2.0.txt")),
+    LicenseEntry(R.string.licenses_symbols, listOf("apache-2.0.txt")),
 )
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -52,7 +52,7 @@ fun LicensesRoute(onBack: () -> Unit) {
                 title = { Text(stringResource(R.string.licenses_title)) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.settings_back))
+                        Icon(painterResource(R.drawable.ic_arrow_back), contentDescription = stringResource(R.string.settings_back))
                     }
                 },
             )

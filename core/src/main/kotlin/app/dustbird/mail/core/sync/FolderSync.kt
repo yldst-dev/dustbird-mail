@@ -66,7 +66,7 @@ class FolderSync(private val pageSize: Int = 50, private val flagWindow: Int = 5
 
     fun loadOlder(session: ImapSession, path: String, store: FolderStore, deliveryHeaders: List<String>): Int {
         session.open(path, readOnly = true)
-        val oldest = store.oldestUid()
+        val oldest = store.oldestUid().takeIf { it > 0 } ?: ((store.cursor()?.highestUid ?: 0) + 1)
         if (oldest <= 1) return 0
         val uids = session.listUids(path, 1, oldest - 1).takeLast(pageSize)
         val fetched = session.fetchMessages(path, uids, deliveryHeaders)

@@ -20,39 +20,47 @@ import app.dustbird.mail.core.model.FolderRole
 import app.dustbird.mail.core.model.SyncMode
 import app.dustbird.mail.sync.MissingCredentialException
 import app.dustbird.mail.sync.SyncOutcome
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.async
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.isActive
-import kotlinx.coroutines.job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 class IdleService : Service() {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val jobs = HashMap<Long, Job>()
+    private var watcher: Job? = null
+
+    @Volatile
+    private var kept = 0
 
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        if (!enterForeground(0)) {
+        if (!enterForeground(kept)) {
             stopSelf()
             return START_NOT_STICKY
         }
         val container = (application as MailApplication).container
-        scope.launch {
+        if (watcher?.isActive == true) return START_NOT_STICKY
+        watcher = scope.launch {
             container.accounts.accounts
                 .map { list -> list.filter { it.syncMode == SyncMode.IDLE && !it.needsReauth }.map { it.id }.toSet() }
                 .distinctUntilChanged()
                 .collect { ids ->
                     jobs.keys.filter { it !in ids }.forEach { jobs.remove(it)?.cancel() }
                     ids.filter { it !in jobs }.forEach { id -> jobs[id] = launch { keepAlive(id) } }
+                    kept = ids.size
                     if (ids.isEmpty() || !enterForeground(ids.size)) stopSelf()
                 }
         }
@@ -84,19 +92,27 @@ class IdleService : Service() {
                 val credentials = container.accounts.credentialsFor(accountId) ?: throw MissingCredentialException(accountId)
                 val inbox = container.db.folders().byRole(accountId, FolderRole.INBOX)?.path ?: "INBOX"
                 val endpoint = app.dustbird.mail.core.model.ServerEndpoint(account.imapHost, account.imapPort, account.imapSecurity)
-                val session = container.connector.connect(endpoint, credentials)
-                val closer = currentCoroutineContext().job.invokeOnCompletion { session.close() }
+                val known = container.db.folders().byRole(accountId, FolderRole.INBOX)?.highestUid ?: 0
+                val session = withContext(Dispatchers.IO) { container.connector.connect(endpoint, credentials) }
                 try {
                     if (!session.capabilities().contains("IDLE")) {
                         delay(FALLBACK_POLL_MS)
                     } else {
                         backoff = INITIAL_BACKOFF_MS
-                        withContext(Dispatchers.IO) {
-                            session.idle(inbox) { scope.launch { container.sync.syncAccount(accountId) } }
+                        coroutineScope {
+                            val waiting = async(Dispatchers.IO) {
+                                if (session.open(inbox).uidNext > known + 1) scope.launch { container.sync.syncAccount(accountId) }
+                                session.idle(inbox) { scope.launch { container.sync.syncAccount(accountId) } }
+                            }
+                            try {
+                                waiting.await()
+                            } catch (error: CancellationException) {
+                                session.close()
+                                throw error
+                            }
                         }
                     }
                 } finally {
-                    closer.dispose()
                     session.close()
                 }
             } catch (_: MissingCredentialException) {

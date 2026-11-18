@@ -14,7 +14,7 @@ import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedSecureTextField
+import androidx.compose.material3.SecureTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -25,12 +25,13 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import app.dustbird.mail.R
 import app.dustbird.mail.core.model.MailAccount
 import app.dustbird.mail.core.net.CheckResult
 import app.dustbird.mail.sync.AccountSyncState
+import app.dustbird.mail.ui.theme.Pill
+import app.dustbird.mail.ui.theme.pillFieldColors
 
 @Composable
 fun ConnectionSection(
@@ -46,8 +47,7 @@ fun ConnectionSection(
     Section(R.string.accounts_connection_heading) {
         Text(
             stringResource(connectionStatusRes(account, syncState)),
-            style = MaterialTheme.typography.bodyLarge,
-            fontWeight = if (problem) FontWeight.Bold else FontWeight.Normal,
+            style = if (problem) MaterialTheme.typography.bodyLargeEmphasized else MaterialTheme.typography.bodyLarge,
             color = if (problem) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
         )
         StageList(account.stages)
@@ -57,7 +57,7 @@ fun ConnectionSection(
             when (check) {
                 Check.Idle -> Unit
                 Check.Running -> Waiting(R.string.accounts_rechecking)
-                Check.NoCredentials -> Text(stringResource(R.string.accounts_check_no_credentials), color = MaterialTheme.colorScheme.error, fontWeight = FontWeight.Bold)
+                Check.NoCredentials -> Text(stringResource(R.string.accounts_check_no_credentials), style = MaterialTheme.typography.bodyLargeEmphasized, color = MaterialTheme.colorScheme.error)
                 is Check.Done -> {
                     CheckLine(R.string.accounts_stage_imap_auth, check.imap)
                     CheckLine(R.string.accounts_stage_smtp_auth, check.smtp)
@@ -78,10 +78,12 @@ fun ReauthForm(reauth: Reauth, onSubmit: (String) -> Unit) {
         if (reauth != Reauth.Idle && reauth != Reauth.Checking) password.clearText()
     }
     Text(stringResource(R.string.accounts_reauth_hint), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-    OutlinedSecureTextField(
+    SecureTextField(
         state = password,
         label = { Text(stringResource(R.string.accounts_password)) },
         modifier = Modifier.fillMaxWidth(),
+        shape = Pill,
+        colors = pillFieldColors(),
         textObfuscationMode = TextObfuscationMode.Hidden,
         enabled = reauth != Reauth.Checking,
     )
@@ -94,13 +96,13 @@ fun ReauthForm(reauth: Reauth, onSubmit: (String) -> Unit) {
             Reauth.Idle -> Unit
             Reauth.Checking -> Waiting(R.string.accounts_reauth_checking)
             is Reauth.Failed -> {
-                Text(stringResource(R.string.accounts_reauth_not_saved), color = MaterialTheme.colorScheme.error, fontWeight = FontWeight.Bold)
+                Text(stringResource(R.string.accounts_reauth_not_saved), style = MaterialTheme.typography.bodyLargeEmphasized, color = MaterialTheme.colorScheme.error)
                 CheckLine(R.string.accounts_stage_imap_auth, reauth.imap)
                 CheckLine(R.string.accounts_stage_smtp_auth, reauth.smtp)
             }
-            Reauth.StoreFailed -> Text(stringResource(R.string.accounts_reauth_store_failed), color = MaterialTheme.colorScheme.error, fontWeight = FontWeight.Bold)
+            Reauth.StoreFailed -> Text(stringResource(R.string.accounts_reauth_store_failed), style = MaterialTheme.typography.bodyLargeEmphasized, color = MaterialTheme.colorScheme.error)
             is Reauth.Done -> {
-                Text(stringResource(R.string.accounts_reauth_done), fontWeight = FontWeight.Bold)
+                Text(stringResource(R.string.accounts_reauth_done), style = MaterialTheme.typography.bodyLargeEmphasized)
                 if (reauth.smtp is CheckResult.Failed) CheckLine(R.string.accounts_stage_smtp_auth, reauth.smtp)
             }
         }
@@ -125,8 +127,7 @@ private fun CheckLine(@StringRes stage: Int, result: CheckResult) {
             stringResource(stage),
             stringResource(failed?.failure?.messageRes() ?: R.string.accounts_stage_ok),
         ),
-        style = MaterialTheme.typography.bodyMedium,
-        fontWeight = if (failed == null) FontWeight.Normal else FontWeight.Bold,
+        style = if (failed == null) MaterialTheme.typography.bodyMedium else MaterialTheme.typography.bodyMediumEmphasized,
         color = if (failed == null) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.error,
     )
 }

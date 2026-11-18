@@ -35,7 +35,7 @@ class InMemoryFolderStore : FolderStore {
         cursor = FolderCursor(uidValidity, 0, false)
     }
     override fun cachedFlags(limit: Int): Map<Long, LocalFlags> = rows.descendingMap().entries.take(limit).associate { it.key to it.value }
-    override fun oldestUid(): Long = rows.firstKey()
+    override fun oldestUid(): Long = if (rows.isEmpty()) 0 else rows.firstKey()
     override fun pendingSeen(): Map<Long, Boolean> = LinkedHashMap(pending)
     override fun clearPending(uid: Long) { pending.remove(uid) }
     override fun insert(messages: List<FetchedMessage>) = messages.forEach {
@@ -107,6 +107,18 @@ class FolderSyncTest {
         assertEquals(4, store.rows.size)
         val third = runSync()
         assertTrue(third.inserted.isEmpty())
+    }
+
+    @Test
+    fun olderPagesStillLoadAfterEveryCachedMessageWasMovedAway() {
+        deliver(5)
+        runSync(pageSize = 2)
+        serverExpunge(4, 5)
+        store.remove(store.rows.keys.toList())
+        val loader = FolderSync(pageSize = 2)
+        assertEquals(2, JakartaImapConnector.connect(imap, alice).use { loader.loadOlder(it, "INBOX", store, emptyList()) })
+        assertEquals(listOf("메일 2", "메일 3"), store.subjects.toSortedMap().values.toList())
+        assertEquals(0, JakartaImapConnector.connect(imap, alice).use { FolderSync().loadOlder(it, "INBOX", InMemoryFolderStore(), emptyList()) })
     }
 
     @Test

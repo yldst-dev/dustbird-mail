@@ -42,6 +42,17 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.getAndUpdate
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import app.dustbird.mail.data.repo.BodyResult
+import app.dustbird.mail.data.repo.AttachmentResult
+import app.dustbird.mail.data.db.DraftAttachmentEntity
+import android.net.Uri
 
 class RecipientField {
     var chips by mutableStateOf<List<EmailAddress>>(emptyList())
@@ -97,6 +108,11 @@ data class UiMessage(@StringRes val res: Int, val args: List<Any> = emptyList())
 
 private data class OutboxSnapshot(val state: SendState, val failure: String?)
 
+sealed interface ComposeExit {
+    data object Held : ComposeExit
+    data class Scheduled(val at: Long) : ComposeExit
+}
+
 class ComposeViewModel(
     private val container: AppContainer,
     private val application: Application,
@@ -109,6 +125,27 @@ class ComposeViewModel(
     val subject = TextFieldState()
     val body = TextFieldState()
     val events = Channel<UiMessage>(Channel.BUFFERED)
+    private var known by mutableStateOf<List<EmailAddress>>(emptyList())
+
+    fun suggestions(field: RecipientField): List<EmailAddress> {
+        val query = field.input.text.toString().trim()
+        if (query.isEmpty() || query.any { it == ',' || it == ';' }) return emptyList()
+        val used = (to.chips + cc.chips + bcc.chips).map { Addresses.normalize(it.address) }.toSet()
+        return known.asSequence()
+            .filter { Addresses.normalize(it.address) !in used }
+            .filter { it.address.contains(query, ignoreCase = true) || it.name?.contains(query, ignoreCase = true) == true }
+            .take(4)
+            .toList()
+    }
+
+    fun pick(field: RecipientField, address: EmailAddress) {
+        field.add(listOf(address))
+        field.input.setTextAndPlaceCursorAtEnd("")
+    }
+    @OptIn(ExperimentalCoroutinesApi::class)
+    val attachments: StateFlow<List<DraftAttachmentEntity>> = handle.getStateFlow<Long?>("draftId", null)
+        .flatMapLatest { id -> if (id == null) flowOf(emptyList()) else container.drafts.attachments(id) }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
     var loadState by mutableStateOf(LoadState.Loading)
         private set
@@ -130,6 +167,9 @@ class ComposeViewModel(
     private var processing by mutableStateOf(false)
     private var outbox by mutableStateOf<OutboxSnapshot?>(null)
     private var hasOutbox by mutableStateOf(handle.contains("outboxId"))
+    var exit by mutableStateOf<ComposeExit?>(null)
+        private set
+    private var scheduledAt: Long? = null
 
     val phase: SendPhase
         get() = when {
@@ -149,6 +189,7 @@ class ComposeViewModel(
     private val saveMutex = Mutex()
     @Volatile
     private var lastSaved: DraftContent? = null
+    private val imports = java.util.concurrent.atomic.AtomicInteger(0)
     @Volatile
     private var lastSynced: DraftContent? = null
     private var inReplyTo: String? = null
@@ -208,6 +249,7 @@ class ComposeViewModel(
             return
         }
         viewModelScope.launch { container.accounts.accountsWithIdentities.collect { groups = it } }
+        viewModelScope.launch { known = container.mail.knownAddresses() }
         val resumedOutbox = outboxId
         if (resumedOutbox != null) {
             sealed = true
@@ -220,18 +262,24 @@ class ComposeViewModel(
             ?.takeIf { id -> identities.any { it.id == id } } ?: identities.first().id
         val stored = draftId?.let { container.drafts.load(it) }
             ?: args.draftId?.let { id -> container.drafts.load(id)?.also { draftId = id } }
+        val prefill = if (stored == null && args.mode == ComposeMode.NEW) container.prefill.getAndUpdate { null } else null
         val start = when {
             stored != null -> {
                 senderConfirmed = handle["senderConfirmed"] ?: true
                 stored
             }
             args.mode != ComposeMode.NEW && args.sourceMessageId != null -> seed(identities, fallbackId)
+            prefill != null -> blank(identities, fallbackId).let { base ->
+                base.copy(to = prefill.to, cc = prefill.cc, bcc = prefill.bcc, subject = SubjectText.clean(prefill.subject), body = prefill.body + base.body)
+            }
             else -> null
         } ?: blank(identities, fallbackId)
         populate(start, identities, fallbackId)
         lastSaved = content()
         lastSynced = if (stored != null) lastSaved else null
         loadState = LoadState.Ready
+        if (prefill != null) attach(prefill.streams)
+        if (stored == null && args.mode == ComposeMode.FORWARD) args.sourceMessageId?.let(::attachOriginals)
     }
 
     private fun blank(identities: List<MailIdentity>, fallbackId: Long): DraftContent {
@@ -332,6 +380,55 @@ class ComposeViewModel(
         }
     }
 
+    fun attach(uris: List<Uri>) {
+        if (sealed || uris.isEmpty()) return
+        commitAll()
+        val current = content()
+        importing {
+            val id = draftId ?: persist(current) ?: return@importing
+            val failed = uris.count { !container.drafts.addAttachment(id, it) }
+            lastSynced = null
+            if (failed > 0) events.trySend(UiMessage(R.string.compose_attach_failed))
+        }
+    }
+
+    private fun importing(block: suspend () -> Unit) {
+        imports.incrementAndGet()
+        background {
+            try {
+                block()
+            } finally {
+                imports.decrementAndGet()
+            }
+        }
+    }
+
+    fun removeAttachment(id: Long) {
+        if (sealed) return
+        background {
+            container.drafts.removeAttachment(id)
+            lastSynced = null
+        }
+    }
+
+    private fun attachOriginals(sourceId: Long) {
+        val current = content()
+        importing {
+            val originals = (container.mail.body(sourceId) as? BodyResult.Loaded)?.attachments.orEmpty()
+            if (originals.isEmpty()) return@importing
+            val id = draftId ?: persist(current) ?: return@importing
+            var failed = 0
+            originals.indices.forEach { index ->
+                val result = container.mail.attachment(sourceId, index)
+                val added = result is AttachmentResult.Ready &&
+                    container.drafts.addAttachment(id, result.file, result.info.fileName, result.info.mimeType)
+                if (!added) failed++
+            }
+            lastSynced = null
+            if (failed > 0) events.trySend(UiMessage(R.string.compose_forward_attachments_failed))
+        }
+    }
+
     fun confirmSender() {
         senderConfirmed = true
         handle["senderConfirmed"] = true
@@ -416,12 +513,26 @@ class ComposeViewModel(
         background { saveMutex.withLock { draftId?.let { container.drafts.delete(it) } } }
     }
 
+    fun sendNow() {
+        scheduledAt = null
+        send()
+    }
+
+    fun schedule(at: Long) {
+        scheduledAt = at
+        send()
+    }
+
     fun send() {
         if (sealed || loadState != LoadState.Ready) return
         sendAttempted = true
         commitAll()
         val current = content()
         if (RecipientCheck.of(current.to, current.cc, current.bcc) != RecipientProblem.NONE) return
+        if (imports.get() > 0) {
+            events.trySend(UiMessage(R.string.compose_attach_wait))
+            return
+        }
         val (group, identity) = lookup(current.identityId) ?: return
         if (!senderChecked && (!senderConfirmed || identity.verification == SendVerification.FAILED)) {
             dialog = ComposeDialog.SenderCheck
@@ -438,16 +549,24 @@ class ComposeViewModel(
         background {
             try {
                 val id = checkNotNull(persist(current, ignoreSeal = true)) { "Draft was discarded" }
-                when (val result = container.send.enqueue(id)) {
+                val at = scheduledAt
+                val now = System.currentTimeMillis()
+                val sendAfter = at ?: container.settings.sendDelaySeconds.first().takeIf { it > 0 }?.let { now + it * 1000L } ?: 0L
+                when (val result = container.send.enqueue(id, sendAfter, track = at == null && sendAfter > now)) {
                     is EnqueueResult.Queued -> {
                         draftId = null
-                        setOutbox(result.outboxId)
-                        observe(result.outboxId)
-                        process(result.outboxId) { container.send.processAccount(group.account.id) }
+                        if (sendAfter > now) {
+                            exit = if (at == null) ComposeExit.Held else ComposeExit.Scheduled(at)
+                        } else {
+                            setOutbox(result.outboxId)
+                            observe(result.outboxId)
+                            process(result.outboxId) { container.send.processAccount(group.account.id) }
+                        }
                     }
                     EnqueueResult.NoRecipients -> reopen(R.string.compose_error_no_recipient)
                     is EnqueueResult.InvalidAddress -> reopen(R.string.compose_error_invalid_recipient)
                     EnqueueResult.DraftMissing -> reopen(R.string.compose_unexpected_error)
+                    EnqueueResult.Unsendable -> reopen(R.string.compose_error_unsendable)
                 }
             } catch (error: Exception) {
                 if (outboxId == null) sealed = false

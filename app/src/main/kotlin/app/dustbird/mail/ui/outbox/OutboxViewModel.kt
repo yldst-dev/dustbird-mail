@@ -31,8 +31,11 @@ class OutboxViewModel(private val container: AppContainer) : ViewModel() {
     private val _busy = MutableStateFlow<Set<Long>>(emptySet())
     private val _notices = MutableSharedFlow<Int>(extraBufferCapacity = 1)
 
+    private val _edits = MutableSharedFlow<Long>(extraBufferCapacity = 1)
+
     val busy: StateFlow<Set<Long>> = _busy
     val notices: SharedFlow<Int> = _notices
+    val edits: SharedFlow<Long> = _edits
 
     fun perform(id: Long, action: OutboxAction) {
         if (id in _busy.value) return
@@ -50,6 +53,8 @@ class OutboxViewModel(private val container: AppContainer) : ViewModel() {
                     OutboxAction.CONFIRM_SENT -> send.confirmSent(id)
                     OutboxAction.RESEND -> send.resend(id)
                     OutboxAction.RETRY_SAVE -> send.retrySave(id)
+                    OutboxAction.SEND_NOW -> send.sendNow(id)
+                    OutboxAction.CANCEL_HOLD -> send.cancelHeld(id)?.let { _edits.tryEmit(it) } ?: _notices.tryEmit(R.string.send_tracker_too_late)
                 }
             } catch (error: CancellationException) {
                 throw error

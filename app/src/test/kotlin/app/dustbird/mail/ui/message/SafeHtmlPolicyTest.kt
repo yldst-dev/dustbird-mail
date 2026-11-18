@@ -109,5 +109,6 @@ class SafeHtmlPolicyTest {
             assertTrue(page.html.contains("color:#1A1A1A;background:#FFFFFF"))
         }
         assertFalse(SafeHtml.hasOwnColors("<div style=\"border-color: red; width: 10px\">x</div>"))
+        assertTrue(SafeHtml.hasOwnColors("<a style=\"background: #03c75a\">x</a>"))
     }
 }

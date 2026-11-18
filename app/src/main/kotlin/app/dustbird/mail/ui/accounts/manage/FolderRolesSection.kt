@@ -29,8 +29,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import app.dustbird.mail.R
 import app.dustbird.mail.core.folder.FolderInfo
@@ -41,6 +41,7 @@ import app.dustbird.mail.core.model.FolderRole
 import app.dustbird.mail.core.model.MailAccount
 import app.dustbird.mail.data.db.FolderEntity
 import app.dustbird.mail.ui.LocalAppContainer
+import app.dustbird.mail.ui.theme.capsuleShape
 import kotlinx.coroutines.launch
 
 private val shownRoles = listOf(
@@ -64,7 +65,7 @@ fun FolderRolesSection(account: MailAccount, folders: List<FolderEntity>?) {
     Section(R.string.accounts_folders_heading) {
         Text(stringResource(R.string.accounts_folders_note), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         if (folders != null && folders.isEmpty()) {
-            Text(stringResource(R.string.accounts_folders_empty), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
+            Text(stringResource(R.string.accounts_folders_empty), style = MaterialTheme.typography.bodyMediumEmphasized)
         }
         if (!folders.isNullOrEmpty()) {
             shownRoles.forEachIndexed { index, (role, name) ->
@@ -96,11 +97,11 @@ private fun RoleRow(@StringRes name: Int, resolution: RoleResolution, automatic:
         Text(roleName, style = MaterialTheme.typography.titleMedium)
         when (resolution) {
             is RoleResolution.Assigned -> {
-                Text(stringResource(R.string.accounts_role_assigned, resolution.path), style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Bold)
+                Text(stringResource(R.string.accounts_role_assigned, resolution.path), style = MaterialTheme.typography.bodyLargeEmphasized)
                 Text(stringResource(sourceRes(resolution, automatic)), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             is RoleResolution.NeedsConfirmation -> {
-                Text(stringResource(R.string.accounts_role_candidates, resolution.candidates.joinToString(", ")), style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Bold)
+                Text(stringResource(R.string.accounts_role_candidates, resolution.candidates.joinToString(", ")), style = MaterialTheme.typography.bodyLargeEmphasized)
                 Text(stringResource(R.string.accounts_role_needs_confirmation), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             RoleResolution.Missing -> Text(stringResource(R.string.accounts_role_missing), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -136,6 +137,7 @@ private fun FolderPicker(
     val scope = rememberCoroutineScope()
     val ordered = candidates + folders.filter { it !in candidates }
     AlertDialog(
+        shape = capsuleShape(),
         onDismissRequest = onDismiss,
         title = { Text(stringResource(R.string.accounts_role_pick_title, stringResource(roleName))) },
         text = {

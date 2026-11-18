@@ -12,23 +12,20 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.safeDrawingPadding
+import androidx.compose.foundation.selection.selectableGroup
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
@@ -40,11 +37,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.role
@@ -53,14 +49,24 @@ import androidx.compose.ui.semantics.toggleableState
 import androidx.compose.ui.state.ToggleableState
 import androidx.compose.ui.unit.dp
 import androidx.core.app.NotificationManagerCompat
+import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
-import androidx.lifecycle.ViewModel
 import app.dustbird.mail.AppContainer
 import app.dustbird.mail.R
 import app.dustbird.mail.core.model.SyncMode
 import app.dustbird.mail.ui.appViewModel
+import app.dustbird.mail.ui.theme.FlatCard
+import androidx.compose.material3.FilterChip
+import app.dustbird.mail.ui.theme.Pill
+import app.dustbird.mail.data.SettingsRepository
+import app.dustbird.mail.ui.theme.CapsuleGap
+import app.dustbird.mail.ui.theme.CapsulePadding
+import app.dustbird.mail.ui.theme.GroupTitle
+import app.dustbird.mail.ui.theme.cardItemShapes
+import app.dustbird.mail.ui.theme.capsuleShape
+import app.dustbird.mail.ui.theme.groupedTopAppBarColors
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -68,6 +74,11 @@ import kotlinx.coroutines.launch
 class SettingsViewModel(private val container: AppContainer) : ViewModel() {
     val hideLockScreen = container.settings.hideLockScreenContent.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), true)
     val accounts = container.accounts.accounts.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    val sendDelay = container.settings.sendDelaySeconds.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), SettingsRepository.DEFAULT_SEND_DELAY)
+
+    fun setSendDelay(seconds: Int) {
+        viewModelScope.launch { container.settings.setSendDelaySeconds(seconds) }
+    }
 
     fun setHideLockScreen(value: Boolean) {
         viewModelScope.launch { container.settings.setHideLockScreenContent(value) }
@@ -81,13 +92,14 @@ class SettingsViewModel(private val container: AppContainer) : ViewModel() {
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class, ExperimentalLayoutApi::class)
 @Composable
 fun SettingsRoute(onBack: () -> Unit, onOpenLicenses: () -> Unit) {
     val viewModel = appViewModel { SettingsViewModel(it) }
     val context = LocalContext.current
     val hideLockScreen by viewModel.hideLockScreen.collectAsStateWithLifecycle()
     val accounts by viewModel.accounts.collectAsStateWithLifecycle()
+    val sendDelay by viewModel.sendDelay.collectAsStateWithLifecycle()
     var notificationsOn by remember { mutableStateOf(NotificationManagerCompat.from(context).areNotificationsEnabled()) }
     var batteryExempt by remember { mutableStateOf(isBatteryExempt(context)) }
     var confirmReset by remember { mutableStateOf(false) }
@@ -100,93 +112,150 @@ fun SettingsRoute(onBack: () -> Unit, onOpenLicenses: () -> Unit) {
         onPauseOrDispose { }
     }
     Scaffold(
+        containerColor = MaterialTheme.colorScheme.surfaceContainer,
         topBar = {
             TopAppBar(
+                colors = groupedTopAppBarColors(),
                 title = { Text(stringResource(R.string.settings_title)) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.settings_back))
+                        Icon(painterResource(R.drawable.ic_arrow_back), contentDescription = stringResource(R.string.settings_back))
                     }
                 },
             )
         },
     ) { padding ->
         Column(
-            Modifier.padding(padding).verticalScroll(rememberScrollState()).padding(horizontal = 20.dp, vertical = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
+            Modifier.padding(padding).verticalScroll(rememberScrollState()).padding(start = 16.dp, end = 16.dp, bottom = 24.dp),
+            verticalArrangement = Arrangement.spacedBy(CapsuleGap),
         ) {
-            Section(R.string.settings_section_notifications)
-            Text(
-                stringResource(if (notificationsOn) R.string.settings_notifications_allowed else R.string.settings_notifications_blocked),
-                style = MaterialTheme.typography.bodyLarge,
-            )
-            if (!notificationsOn && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
-                context.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
-            ) {
-                Button(onClick = { permission.launch(Manifest.permission.POST_NOTIFICATIONS) }, modifier = Modifier.heightIn(min = 48.dp)) {
-                    Text(stringResource(R.string.settings_notifications_allow))
+            GroupTitle(stringResource(R.string.settings_section_notifications))
+            FlatCard {
+                Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text(
+                        stringResource(if (notificationsOn) R.string.settings_notifications_allowed else R.string.settings_notifications_blocked),
+                        style = MaterialTheme.typography.bodyLarge,
+                    )
+                    if (!notificationsOn && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+                        context.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+                    ) {
+                        Button(onClick = { permission.launch(Manifest.permission.POST_NOTIFICATIONS) }) {
+                            Text(stringResource(R.string.settings_notifications_allow))
+                        }
+                    }
+                    OutlinedButton(onClick = { openNotificationSettings(context) }) {
+                        Text(stringResource(R.string.settings_notifications_open))
+                    }
                 }
             }
-            OutlinedButton(onClick = { openNotificationSettings(context) }, modifier = Modifier.heightIn(min = 48.dp)) {
-                Text(stringResource(R.string.settings_notifications_open))
-            }
-            SwitchRow(R.string.settings_hide_lock_title, R.string.settings_hide_lock_text, hideLockScreen, viewModel::setHideLockScreen)
-            HorizontalDivider()
+            ListItem(
+                onClick = { viewModel.setHideLockScreen(!hideLockScreen) },
+                shapes = cardItemShapes(),
+                contentPadding = CapsulePadding,
+                modifier = Modifier.semantics {
+                    role = Role.Switch
+                    toggleableState = ToggleableState(hideLockScreen)
+                },
+                supportingContent = { Text(stringResource(R.string.settings_hide_lock_text)) },
+                trailingContent = { Switch(checked = hideLockScreen, onCheckedChange = null) },
+            ) { Text(stringResource(R.string.settings_hide_lock_title)) }
 
-            Section(R.string.settings_section_sync)
-            Text(stringResource(R.string.settings_sync_modes_title), style = MaterialTheme.typography.titleSmall)
-            Text(stringResource(R.string.settings_sync_manual), style = MaterialTheme.typography.bodyMedium)
-            Text(stringResource(R.string.settings_sync_periodic), style = MaterialTheme.typography.bodyMedium)
-            Text(stringResource(R.string.settings_sync_idle), style = MaterialTheme.typography.bodyMedium)
-            if (accounts.isEmpty()) {
-                Text(stringResource(R.string.settings_sync_no_accounts), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-            accounts.forEach { account ->
-                val mode = when (account.syncMode) {
-                    SyncMode.MANUAL -> R.string.settings_mode_manual
-                    SyncMode.PERIODIC -> R.string.settings_mode_periodic
-                    SyncMode.IDLE -> R.string.settings_mode_idle
+            GroupTitle(stringResource(R.string.settings_section_send))
+            FlatCard {
+                Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(stringResource(R.string.settings_send_delay_title), style = MaterialTheme.typography.titleMediumEmphasized)
+                    Text(
+                        stringResource(R.string.settings_send_delay_text),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    FlowRow(Modifier.selectableGroup(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        SettingsRepository.SEND_DELAY_CHOICES.forEach { seconds ->
+                            FilterChip(
+                                selected = sendDelay == seconds,
+                                onClick = { viewModel.setSendDelay(seconds) },
+                                label = {
+                                    Text(if (seconds == 0) stringResource(R.string.settings_send_delay_off) else stringResource(R.string.settings_send_delay_seconds, seconds))
+                                },
+                                shape = Pill,
+                            )
+                        }
+                    }
                 }
+            }
+
+            GroupTitle(stringResource(R.string.settings_section_sync))
+            FlatCard {
+                Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(stringResource(R.string.settings_sync_modes_title), style = MaterialTheme.typography.titleSmallEmphasized)
+                    Text(stringResource(R.string.settings_sync_manual), style = MaterialTheme.typography.bodyMedium)
+                    Text(stringResource(R.string.settings_sync_periodic), style = MaterialTheme.typography.bodyMedium)
+                    Text(stringResource(R.string.settings_sync_idle), style = MaterialTheme.typography.bodyMedium)
+                }
+            }
+            FlatCard {
+                Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    if (accounts.isEmpty()) {
+                        Text(stringResource(R.string.settings_sync_no_accounts), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    accounts.forEach { account ->
+                        val mode = when (account.syncMode) {
+                            SyncMode.MANUAL -> R.string.settings_mode_manual
+                            SyncMode.PERIODIC -> R.string.settings_mode_periodic
+                            SyncMode.IDLE -> R.string.settings_mode_idle
+                        }
+                        Text(
+                            stringResource(R.string.settings_sync_account_mode, account.label.ifBlank { account.displayName }, stringResource(mode)),
+                            style = MaterialTheme.typography.bodyLargeEmphasized,
+                        )
+                    }
+                }
+            }
+            FlatCard {
+                Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(stringResource(R.string.settings_battery_title), style = MaterialTheme.typography.titleSmallEmphasized)
+                    Text(stringResource(R.string.settings_battery_text), style = MaterialTheme.typography.bodyMedium)
+                    Text(
+                        stringResource(if (batteryExempt) R.string.settings_battery_exempt else R.string.settings_battery_optimized),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    OutlinedButton(onClick = { openBatterySettings(context) }) {
+                        Text(stringResource(R.string.settings_battery_open))
+                    }
+                }
+            }
+
+            GroupTitle(stringResource(R.string.settings_section_privacy))
+            FlatCard {
+                Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text(stringResource(R.string.settings_privacy_text), style = MaterialTheme.typography.bodyMedium)
+                    Button(
+                        onClick = { confirmReset = true },
+                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error, contentColor = MaterialTheme.colorScheme.onError),
+                    ) { Text(stringResource(R.string.settings_reset_action)) }
+                }
+            }
+
+            GroupTitle(stringResource(R.string.settings_section_about))
+            ListItem(
+                onClick = onOpenLicenses,
+                shapes = cardItemShapes(),
+                contentPadding = CapsulePadding,
+                trailingContent = { Icon(painterResource(R.drawable.ic_chevron_right), contentDescription = null) },
+            ) { Text(stringResource(R.string.settings_licenses)) }
+            ListItem(shapes = cardItemShapes(), contentPadding = CapsulePadding) {
                 Text(
-                    stringResource(R.string.settings_sync_account_mode, account.label.ifBlank { account.displayName }, stringResource(mode)),
-                    style = MaterialTheme.typography.titleSmall,
+                    stringResource(R.string.settings_version, versionName(context)),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-            Text(stringResource(R.string.settings_battery_title), style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(top = 8.dp))
-            Text(stringResource(R.string.settings_battery_text), style = MaterialTheme.typography.bodyMedium)
-            Text(
-                stringResource(if (batteryExempt) R.string.settings_battery_exempt else R.string.settings_battery_optimized),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            OutlinedButton(onClick = { openBatterySettings(context) }, modifier = Modifier.heightIn(min = 48.dp)) {
-                Text(stringResource(R.string.settings_battery_open))
-            }
-            HorizontalDivider()
-
-            Section(R.string.settings_section_privacy)
-            Text(stringResource(R.string.settings_privacy_text), style = MaterialTheme.typography.bodyMedium)
-            Button(
-                onClick = { confirmReset = true },
-                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error, contentColor = MaterialTheme.colorScheme.onError),
-                modifier = Modifier.heightIn(min = 48.dp),
-            ) { Text(stringResource(R.string.settings_reset_action)) }
-            HorizontalDivider()
-
-            Section(R.string.settings_section_about)
-            TextButton(onClick = onOpenLicenses, modifier = Modifier.heightIn(min = 48.dp), contentPadding = PaddingValues(0.dp)) {
-                Text(stringResource(R.string.settings_licenses), style = MaterialTheme.typography.bodyLarge)
-            }
-            Text(
-                stringResource(R.string.settings_version, versionName(context)),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(bottom = 24.dp),
-            )
         }
     }
     if (confirmReset) {
         AlertDialog(
+            shape = capsuleShape(),
             onDismissRequest = { confirmReset = false },
             title = { Text(stringResource(R.string.settings_reset_title)) },
             text = { Text(stringResource(R.string.settings_reset_text)) },
@@ -198,29 +267,6 @@ fun SettingsRoute(onBack: () -> Unit, onOpenLicenses: () -> Unit) {
             },
             dismissButton = { TextButton(onClick = { confirmReset = false }) { Text(stringResource(R.string.settings_reset_cancel)) } },
         )
-    }
-}
-
-@Composable
-private fun Section(title: Int) {
-    Text(stringResource(title), style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(top = 12.dp))
-}
-
-@Composable
-private fun SwitchRow(title: Int, text: Int, checked: Boolean, onChange: (Boolean) -> Unit) {
-    Row(
-        Modifier.fillMaxWidth().heightIn(min = 56.dp).semantics(mergeDescendants = true) {
-            role = Role.Switch
-            toggleableState = if (checked) ToggleableState.On else ToggleableState.Off
-        },
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(16.dp),
-    ) {
-        Column(Modifier.weight(1f)) {
-            Text(stringResource(title), style = MaterialTheme.typography.titleSmall)
-            Text(stringResource(text), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
-        Switch(checked = checked, onCheckedChange = onChange)
     }
 }
 

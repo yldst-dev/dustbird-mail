@@ -261,4 +261,107 @@ class GreenMailGatewayTest {
             assertEquals(listOf("계약서.txt"), mixed.attachments.map { it.fileName })
         }
     }
+
+    private fun createFolder(name: String) {
+        val store = javax.mail.Session.getInstance(java.util.Properties().apply { put("mail.imap.ssl.enable", "true") }).getStore("imap")
+        store.connect(server.host, server.imapPort, alice.username, alice.secret)
+        store.getFolder(name).create(javax.mail.Folder.HOLDS_MESSAGES)
+        store.close()
+    }
+
+    @Test
+    fun messagesCanBeStarredSearchedMovedAndDeleted() {
+        createFolder("Archive")
+        deliver("<s1@example.test>", subject = "분기 보고서")
+        deliver("<s2@example.test>", subject = "점심 약속")
+        JakartaImapConnector.connect(imap, alice).use { session ->
+            session.open("INBOX")
+            val uids = session.listUids("INBOX", 1, null)
+            assertEquals(2, uids.size)
+            session.setFlag("INBOX", uids, MessageFlag.FLAGGED, true)
+            assertTrue(session.fetchFlags("INBOX", uids).values.all { it.flagged })
+            session.setFlag("INBOX", listOf(uids[1]), MessageFlag.FLAGGED, false)
+            assertFalse(session.fetchFlags("INBOX", uids).getValue(uids[1]).flagged)
+            assertEquals(listOf(uids[0]), session.search("INBOX", "보고서"))
+            assertEquals(uids, session.search("INBOX", "bob@example.test"))
+            assertTrue(session.search("INBOX", "없는 낱말").isEmpty())
+
+            session.move("INBOX", listOf(uids[0]), "Archive")
+            assertEquals(listOf(uids[1]), session.listUids("INBOX", 1, null))
+            session.open("Archive")
+            val archived = session.listUids("Archive", 1, null)
+            assertEquals("분기 보고서", session.fetchMessages("Archive", archived, emptyList()).single().headers.subject)
+
+            session.open("INBOX")
+            session.delete("INBOX", listOf(uids[1]))
+            assertTrue(session.listUids("INBOX", 1, null).isEmpty())
+            session.move("INBOX", emptyList(), "Archive")
+            session.delete("INBOX", listOf(999L))
+        }
+    }
+
+    @Test
+    fun attachmentBytesAreFetchedByIndex() {
+        val binary = ByteArray(5000) { (it % 251).toByte() }
+        deliverMime("첨부 두 개") { message ->
+            val mixed = javax.mail.internet.MimeMultipart("mixed")
+            mixed.addBodyPart(javax.mail.internet.MimeBodyPart().apply { setText("본문", "UTF-8") })
+            mixed.addBodyPart(javax.mail.internet.MimeBodyPart().apply {
+                setContent("첫 번째 첨부", "text/plain; charset=UTF-8")
+                fileName = "메모.txt"
+                disposition = "attachment"
+            })
+            mixed.addBodyPart(javax.mail.internet.MimeBodyPart().apply {
+                dataHandler = javax.activation.DataHandler(javax.mail.util.ByteArrayDataSource(binary, "application/octet-stream"))
+                fileName = "data.bin"
+                disposition = "attachment"
+            })
+            message.setContent(mixed)
+        }
+        JakartaImapConnector.connect(imap, alice).use { session ->
+            session.open("INBOX", readOnly = true)
+            val uid = session.listUids("INBOX", 1, null).single()
+            val content = session.fetchContent("INBOX", uid)!!
+            assertEquals(listOf("메모.txt", "data.bin"), content.attachments.map { it.fileName })
+            val first = java.io.ByteArrayOutputStream()
+            assertTrue(session.fetchAttachment("INBOX", uid, 0, first))
+            assertEquals("첫 번째 첨부", first.toString("UTF-8"))
+            val second = java.io.ByteArrayOutputStream()
+            assertTrue(session.fetchAttachment("INBOX", uid, 1, second))
+            assertContentEquals(binary, second.toByteArray())
+            assertFalse(session.fetchAttachment("INBOX", uid, 2, java.io.ByteArrayOutputStream()))
+        }
+    }
+
+    @Test
+    fun composedAttachmentsArriveIntact() {
+        val file = java.io.File.createTempFile("dustbird", ".bin").apply { writeBytes(ByteArray(3000) { (it % 7).toByte() }); deleteOnExit() }
+        val composed = MimeComposer.compose(
+            OutgoingMessage(
+                from = EmailAddress("bob@example.test", "밥"),
+                to = listOf(EmailAddress("alice@example.test")),
+                cc = emptyList(),
+                bcc = emptyList(),
+                subject = "첨부 보냄",
+                text = "본문과 첨부",
+                messageId = "<att-1@example.test>",
+                inReplyTo = null,
+                references = emptyList(),
+                sentAt = Instant.parse("2026-11-16T01:02:03Z"),
+                attachments = listOf(app.dustbird.mail.core.mime.OutgoingAttachment("한글 이름.bin", "application/octet-stream", file)),
+            ),
+        )
+        assertIs<SmtpOutcome.Accepted>(JakartaSmtpSender.send(smtp, bob, composed))
+        JakartaImapConnector.connect(imap, alice).use { session ->
+            session.open("INBOX", readOnly = true)
+            val uid = session.listUids("INBOX", 1, null).single()
+            val content = session.fetchContent("INBOX", uid)!!
+            assertEquals("본문과 첨부", content.text)
+            assertEquals(listOf("한글 이름.bin"), content.attachments.map { it.fileName })
+            val bytes = java.io.ByteArrayOutputStream()
+            assertTrue(session.fetchAttachment("INBOX", uid, 0, bytes))
+            assertContentEquals(file.readBytes(), bytes.toByteArray())
+            assertTrue(session.fetchMessages("INBOX", listOf(uid), emptyList()).single().hasAttachment)
+        }
+    }
 }

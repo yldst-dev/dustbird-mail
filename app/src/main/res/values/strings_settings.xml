@@ -9,6 +9,11 @@
     <string name="settings_notifications_open">시스템 알림 설정 열기</string>
     <string name="settings_hide_lock_title">잠금 화면에서 내용 숨기기</string>
     <string name="settings_hide_lock_text">켜 두면 잠금 화면에는 \'새 메일\'과 계정 이름만 보이고 보낸 사람과 제목은 잠금을 풀어야 보입니다.</string>
+    <string name="settings_section_send">보내기</string>
+    <string name="settings_send_delay_title">보내기 취소 시간</string>
+    <string name="settings_send_delay_text">보내기를 누른 뒤 이 시간 동안은 실제로 보내지 않고 기다립니다. 그동안 화면 아래의 취소를 누르면 보내지 않고 다시 고칠 수 있습니다.</string>
+    <string name="settings_send_delay_off">바로 보내기</string>
+    <string name="settings_send_delay_seconds">%1$d초</string>
     <string name="settings_section_sync">동기화와 배터리</string>
     <string name="settings_sync_modes_title">계정마다 받아오는 방식</string>
     <string name="settings_sync_manual">수동: 화면을 당겨 새로고침할 때만 받아옵니다.</string>
@@ -41,6 +46,7 @@
     <string name="licenses_jsoup">jsoup 1.24.1 · MIT License · HTML 정제</string>
     <string name="licenses_androidx">AndroidX, Jetpack Compose, Material 3, Room, WorkManager, DataStore, Navigation, Lifecycle · Apache License 2.0</string>
     <string name="licenses_kotlin">Kotlin과 kotlinx.coroutines · Apache License 2.0</string>
+    <string name="licenses_symbols">Material Symbols 아이콘 · Google · Apache License 2.0 · 화면 아이콘</string>
     <string name="licenses_show_text">라이선스 전문 보기</string>
     <string name="licenses_hide_text">라이선스 전문 접기</string>
 </resources>

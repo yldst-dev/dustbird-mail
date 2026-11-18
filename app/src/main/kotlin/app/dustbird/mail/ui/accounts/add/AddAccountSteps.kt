@@ -1,10 +1,11 @@
-@file:OptIn(ExperimentalMaterial3ExpressiveApi::class)
+@file:OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
 
 package app.dustbird.mail.ui.accounts.add
 
-import android.provider.Settings
+import androidx.annotation.DrawableRes
 import androidx.annotation.StringRes
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.FiniteAnimationSpec
 import androidx.compose.animation.core.snap
 import androidx.compose.animation.expandVertically
@@ -32,62 +33,82 @@ import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.ZeroCornerSize
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.text.input.TextFieldLineLimits
 import androidx.compose.foundation.text.input.TextFieldState
 import androidx.compose.foundation.text.input.TextObfuscationMode
+import androidx.compose.foundation.text.input.rememberTextFieldState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.KeyboardArrowDown
-import androidx.compose.material.icons.filled.KeyboardArrowUp
-import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.ButtonGroupDefaults
 import androidx.compose.material3.Checkbox
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.ListItem
+import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.MotionScheme
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedSecureTextField
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
+import androidx.compose.material3.SecureTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.TextField
 import androidx.compose.material3.ToggleButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalWindowInfo
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.intl.LocaleList
+import androidx.compose.ui.text.style.LineBreak
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import app.dustbird.mail.R
+import app.dustbird.mail.core.agent.BackendFailure
 import app.dustbird.mail.core.model.FolderRole
 import app.dustbird.mail.core.model.TransportSecurity
 import app.dustbird.mail.core.net.CheckResult
 import app.dustbird.mail.core.net.ConnectFailure
 import app.dustbird.mail.core.provider.Providers
 import app.dustbird.mail.sync.SyncOutcome
+import app.dustbird.mail.ui.agent.agentFailureText
+import app.dustbird.mail.ui.mailbox.rememberAnimationsEnabled
+import app.dustbird.mail.ui.theme.CapsuleGap
+import app.dustbird.mail.ui.theme.CapsulePadding
+import app.dustbird.mail.ui.theme.FlatCard
+import app.dustbird.mail.ui.theme.Pill
+import app.dustbird.mail.ui.theme.cardItemShapes
+import app.dustbird.mail.ui.theme.pillFieldColors
+import app.dustbird.mail.ui.theme.pillToggleShapes
 
 @Immutable
 class Motion(private val scheme: MotionScheme, val enabled: Boolean) {
@@ -97,25 +118,46 @@ class Motion(private val scheme: MotionScheme, val enabled: Boolean) {
 
 @Composable
 fun rememberMotion(): Motion {
-    val context = LocalContext.current
     val scheme = MaterialTheme.motionScheme
-    return remember(scheme) {
-        Motion(scheme, Settings.Global.getFloat(context.contentResolver, Settings.Global.ANIMATOR_DURATION_SCALE, 1f) != 0f)
-    }
+    val enabled = rememberAnimationsEnabled()
+    return remember(scheme, enabled) { Motion(scheme, enabled) }
 }
 
+private val wordWrap = LineBreak(LineBreak.Strategy.HighQuality, LineBreak.Strictness.Normal, LineBreak.WordBreak.Phrase)
+
+private fun TextStyle.prose(): TextStyle = copy(lineBreak = wordWrap, localeList = LocaleList("ko"))
+
 @Composable
-private fun StepColumn(content: @Composable ColumnScope.() -> Unit) {
-    Column(
-        Modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(horizontal = 16.dp, vertical = 8.dp)
-            .wrapContentWidth(Alignment.CenterHorizontally)
-            .widthIn(max = 640.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp),
-        content = content,
-    )
+private fun StepColumn(actions: (@Composable ColumnScope.() -> Unit)? = null, content: @Composable ColumnScope.() -> Unit) {
+    val docked = with(LocalDensity.current) { LocalWindowInfo.current.containerSize.height.toDp() } >= 480.dp
+    val scroll = rememberScrollState()
+    Column(Modifier.fillMaxSize()) {
+        Column(
+            Modifier
+                .weight(1f)
+                .fillMaxWidth()
+                .verticalScroll(scroll)
+                .padding(start = 16.dp, top = 16.dp, end = 16.dp, bottom = 8.dp)
+                .wrapContentWidth(Alignment.CenterHorizontally)
+                .widthIn(max = 640.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+        ) {
+            content()
+            if (!docked) actions?.invoke(this)
+        }
+        if (docked && actions != null) {
+            HorizontalDivider(color = if (scroll.canScrollForward) MaterialTheme.colorScheme.outlineVariant else Color.Transparent)
+            Column(
+                Modifier
+                    .fillMaxWidth()
+                    .padding(start = 16.dp, top = 12.dp, end = 16.dp, bottom = 16.dp)
+                    .wrapContentWidth(Alignment.CenterHorizontally)
+                    .widthIn(max = 640.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+                content = actions,
+            )
+        }
+    }
 }
 
 @Composable
@@ -123,7 +165,6 @@ private fun PrimaryButton(text: String, onClick: () -> Unit, enabled: Boolean = 
     Button(
         onClick = onClick,
         enabled = enabled,
-        shapes = ButtonDefaults.shapes(),
         modifier = Modifier.fillMaxWidth().heightIn(min = ButtonDefaults.MediumContainerHeight),
         contentPadding = ButtonDefaults.contentPaddingFor(ButtonDefaults.MediumContainerHeight),
     ) { Text(text) }
@@ -133,7 +174,6 @@ private fun PrimaryButton(text: String, onClick: () -> Unit, enabled: Boolean = 
 private fun SecondaryButton(text: String, onClick: () -> Unit) {
     OutlinedButton(
         onClick = onClick,
-        shapes = ButtonDefaults.shapes(),
         modifier = Modifier.fillMaxWidth().heightIn(min = ButtonDefaults.MediumContainerHeight),
         contentPadding = ButtonDefaults.contentPaddingFor(ButtonDefaults.MediumContainerHeight),
     ) { Text(text) }
@@ -148,75 +188,107 @@ private fun TertiaryButton(text: String, onClick: () -> Unit) {
 fun ChooseStep(onChoose: (providerId: String, suggestedName: String) -> Unit) {
     StepColumn {
         Text(stringResource(R.string.add_account_choose_intro), style = MaterialTheme.typography.bodyLarge)
-        Column(Modifier.fillMaxWidth()) {
-            HorizontalDivider()
-            Providers.all.forEach { profile ->
+        Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(CapsuleGap)) {
+            Providers.all.forEachIndexed { index, profile ->
                 val texts = serviceTexts(profile.id)
                 val name = stringResource(texts.name)
-                Row(
-                    Modifier
-                        .fillMaxWidth()
-                        .heightIn(min = 72.dp)
-                        .clickable(role = Role.Button) { onChoose(profile.id, name) }
-                        .padding(vertical = 12.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                        Text(name, style = MaterialTheme.typography.titleLargeEmphasized)
-                        Text(
-                            stringResource(texts.hint),
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                    Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null)
-                }
-                HorizontalDivider()
+                ListItem(
+                    onClick = { onChoose(profile.id, name) },
+                    shapes = cardItemShapes(),
+                    contentPadding = CapsulePadding,
+                    supportingContent = { Text(stringResource(texts.hint)) },
+                    trailingContent = { Icon(painterResource(R.drawable.ic_chevron_right), contentDescription = null) },
+                ) { Text(name, style = MaterialTheme.typography.titleMediumEmphasized) }
             }
         }
     }
 }
 
 @Composable
-fun PrepareStep(providerId: String, acknowledged: Boolean, onAcknowledge: (Boolean) -> Unit, onNext: () -> Unit) {
+private fun Notice(@DrawableRes icon: Int, text: String, color: Color) {
+    FlatCard(color = color) {
+        Row(Modifier.padding(horizontal = 20.dp, vertical = 16.dp), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+            Icon(painterResource(icon), contentDescription = null)
+            Text(text, style = MaterialTheme.typography.bodyLargeEmphasized.prose())
+        }
+    }
+}
+
+@Composable
+fun PrepareStep(providerId: String, acknowledged: Boolean, motion: Motion, onAcknowledge: (Boolean) -> Unit, onNext: () -> Unit) {
     val texts = serviceTexts(providerId)
-    StepColumn {
-        if (providerId == Providers.CUSTOM.id) {
-            Text(stringResource(R.string.add_account_prepare_custom_intro), style = MaterialTheme.typography.bodyLarge)
-        } else {
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                Icon(Icons.Filled.Warning, contentDescription = null, tint = MaterialTheme.colorScheme.error)
+    val steps = texts.checklist.filterNot { it in texts.notes }
+    val marker = with(LocalDensity.current) { 28.sp.toDp() }
+    StepColumn(
+        actions = {
+            val container by animateColorAsState(
+                if (acknowledged) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surface,
+                motion.effects(),
+                label = "acknowledge",
+            )
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = 56.dp)
+                    .clip(Pill)
+                    .background(container)
+                    .toggleable(value = acknowledged, role = Role.Checkbox, onValueChange = onAcknowledge)
+                    .padding(horizontal = 16.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                Checkbox(checked = acknowledged, onCheckedChange = null)
                 Text(
-                    stringResource(R.string.add_account_prepare_warning, stringResource(texts.name), stringResource(texts.secret)),
-                    style = MaterialTheme.typography.bodyLargeEmphasized,
+                    stringResource(R.string.add_account_prepare_ack),
+                    style = MaterialTheme.typography.titleMediumEmphasized,
+                    color = if (acknowledged) MaterialTheme.colorScheme.onSecondaryContainer else MaterialTheme.colorScheme.onSurface,
                 )
             }
+            PrimaryButton(stringResource(R.string.add_account_next), onNext, enabled = acknowledged)
+        },
+    ) {
+        if (providerId == Providers.CUSTOM.id) {
+            Notice(R.drawable.ic_info, stringResource(R.string.add_account_prepare_custom_intro), MaterialTheme.colorScheme.secondaryContainer)
+        } else {
+            Notice(
+                R.drawable.ic_warning,
+                stringResource(R.string.add_account_prepare_warning, stringResource(texts.name), stringResource(texts.secret)),
+                MaterialTheme.colorScheme.errorContainer,
+            )
         }
-        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            texts.checklist.forEach { item ->
-                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Box(
-                        Modifier
-                            .padding(top = 9.dp)
-                            .size(6.dp)
-                            .background(MaterialTheme.colorScheme.onSurfaceVariant, CircleShape),
-                    )
-                    Text(stringResource(item), style = MaterialTheme.typography.bodyLarge)
+        FlatCard {
+            Column(Modifier.padding(vertical = 10.dp)) {
+                texts.checklist.forEach { item ->
+                    val note = item in texts.notes
+                    val style = if (note) MaterialTheme.typography.bodyMedium else MaterialTheme.typography.bodyLarge
+                    Row(
+                        Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 10.dp).semantics(mergeDescendants = true) {},
+                        horizontalArrangement = Arrangement.spacedBy(16.dp),
+                    ) {
+                        Box(
+                            Modifier.size(marker).background(if (note) Color.Transparent else MaterialTheme.colorScheme.secondaryContainer, CircleShape),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            if (note) {
+                                Icon(painterResource(R.drawable.ic_info), contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                            } else {
+                                Text(
+                                    (steps.indexOf(item) + 1).toString(),
+                                    style = MaterialTheme.typography.labelLarge,
+                                    color = MaterialTheme.colorScheme.onSecondaryContainer,
+                                )
+                            }
+                        }
+                        Text(
+                            stringResource(item),
+                            modifier = Modifier.weight(1f).padding(top = with(LocalDensity.current) { ((marker - style.lineHeight.toDp()) / 2).coerceAtLeast(0.dp) }),
+                            style = style.prose(),
+                            color = if (note) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface,
+                        )
+                    }
                 }
             }
         }
-        Row(
-            Modifier
-                .fillMaxWidth()
-                .heightIn(min = 56.dp)
-                .toggleable(value = acknowledged, role = Role.Checkbox, onValueChange = onAcknowledge),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            Checkbox(checked = acknowledged, onCheckedChange = null)
-            Text(stringResource(R.string.add_account_prepare_ack), style = MaterialTheme.typography.titleMediumEmphasized)
-        }
-        PrimaryButton(stringResource(R.string.add_account_next), onNext, enabled = acknowledged)
     }
 }
 
@@ -231,9 +303,11 @@ private fun Field(
     monospace: Boolean = false,
 ) {
     val message = error ?: hint
-    OutlinedTextField(
+    TextField(
         state = state,
         modifier = Modifier.fillMaxWidth(),
+        shape = Pill,
+        colors = pillFieldColors(),
         textStyle = if (monospace) LocalTextStyle.current.copy(fontFamily = FontFamily.Monospace) else LocalTextStyle.current,
         label = { Text(stringResource(label)) },
         supportingText = message?.let { { Text(stringResource(it)) } },
@@ -249,18 +323,18 @@ private fun SecurityChoice(selected: TransportSecurity, onSelect: (TransportSecu
         Text(stringResource(R.string.add_account_security), style = MaterialTheme.typography.labelLarge)
         Row(
             Modifier.fillMaxWidth().selectableGroup(),
-            horizontalArrangement = Arrangement.spacedBy(ButtonGroupDefaults.ConnectedSpaceBetween),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             ToggleButton(
                 checked = selected == TransportSecurity.TLS,
                 onCheckedChange = { onSelect(TransportSecurity.TLS) },
-                shapes = ButtonGroupDefaults.connectedLeadingButtonShapes(),
+                shapes = pillToggleShapes(),
                 modifier = Modifier.weight(1f).heightIn(min = 48.dp),
             ) { Text(stringResource(R.string.add_account_security_tls)) }
             ToggleButton(
                 checked = selected == TransportSecurity.STARTTLS,
                 onCheckedChange = { onSelect(TransportSecurity.STARTTLS) },
-                shapes = ButtonGroupDefaults.connectedTrailingButtonShapes(),
+                shapes = pillToggleShapes(),
                 modifier = Modifier.weight(1f).heightIn(min = 48.dp),
             ) { Text(stringResource(R.string.add_account_security_starttls)) }
         }
@@ -273,12 +347,137 @@ private fun SecurityChoice(selected: TransportSecurity, onSelect: (TransportSecu
 }
 
 @Composable
-fun FormStep(providerId: String, fields: AddAccountFields, showErrors: Boolean, motion: Motion, onSubmit: () -> Unit) {
+private fun AssistSheet(text: TextFieldState, @StringRes example: Int, assist: AssistState, onRun: () -> Unit, onOpenSettings: () -> Unit, onDismiss: () -> Unit) {
+    val running = assist is AssistState.Running
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        shape = MaterialTheme.shapes.extraExtraLarge.copy(bottomStart = ZeroCornerSize, bottomEnd = ZeroCornerSize),
+    ) {
+        Column(
+            Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(start = 16.dp, end = 16.dp, bottom = 24.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Column(Modifier.padding(horizontal = 8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text(stringResource(R.string.add_account_assist_title), style = MaterialTheme.typography.titleLarge)
+                Text(
+                    stringResource(R.string.add_account_assist_body),
+                    style = MaterialTheme.typography.bodyMedium.prose(),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            TextField(
+                state = text,
+                modifier = Modifier.fillMaxWidth(),
+                enabled = !running,
+                shape = MaterialTheme.shapes.large,
+                colors = pillFieldColors(),
+                placeholder = { Text(stringResource(example)) },
+                lineLimits = TextFieldLineLimits.MultiLine(minHeightInLines = 3, maxHeightInLines = 8),
+            )
+            Row(Modifier.padding(horizontal = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Icon(
+                    painterResource(R.drawable.ic_info),
+                    contentDescription = null,
+                    modifier = Modifier.size(20.dp),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Text(
+                    stringResource(R.string.add_account_assist_privacy),
+                    style = MaterialTheme.typography.bodyMedium.prose(),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            Column(Modifier.padding(horizontal = 8.dp).semantics { liveRegion = LiveRegionMode.Polite }) {
+                when (assist) {
+                    AssistState.Running -> Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        LoadingIndicator(Modifier.size(36.dp))
+                        Text(stringResource(R.string.add_account_assist_running), style = MaterialTheme.typography.bodyMedium)
+                    }
+                    is AssistState.Failed -> Text(
+                        stringResource(agentFailureText(assist.failure)),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                    is AssistState.Done -> if (assist.filled.isEmpty()) {
+                        Text(stringResource(R.string.add_account_assist_empty), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error)
+                    }
+                    AssistState.Idle -> Unit
+                }
+            }
+            PrimaryButton(stringResource(R.string.add_account_assist_run), onRun, enabled = !running && text.text.isNotBlank())
+            if (assist is AssistState.Failed && (assist.failure == BackendFailure.NOT_CONFIGURED || assist.failure == BackendFailure.AUTH)) {
+                TertiaryButton(stringResource(R.string.add_account_assist_settings), onOpenSettings)
+            }
+        }
+    }
+}
+
+@Composable
+fun FormStep(
+    providerId: String,
+    fields: AddAccountFields,
+    showErrors: Boolean,
+    motion: Motion,
+    onSubmit: () -> Unit,
+    assist: AssistState,
+    agentReady: Boolean,
+    onAssist: (String) -> Unit,
+    onDismissAssist: () -> Unit,
+    onOpenAgentSettings: () -> Unit,
+) {
     val texts = serviceTexts(providerId)
     val invalid = if (showErrors) FormRules.invalidFields(fields.values()) else emptySet()
     var revealed by remember { mutableStateOf(false) }
+    var assistOpen by rememberSaveable { mutableStateOf(false) }
+    val description = rememberTextFieldState()
+    val filled = (assist as? AssistState.Done)?.filled.orEmpty()
+    val complete by remember(fields) { derivedStateOf { FormRules.isComplete(fields.values()) } }
     fun required(field: FormField) = if (field in invalid) R.string.add_account_error_required else null
-    StepColumn {
+    LaunchedEffect(assist) { if (filled.isNotEmpty()) assistOpen = false }
+    if (assistOpen) {
+        AssistSheet(
+            text = description,
+            example = if (providerId == Providers.CUSTOM.id) R.string.add_account_assist_placeholder_custom else R.string.add_account_assist_placeholder,
+            assist = assist,
+            onRun = { onAssist(description.text.toString()) },
+            onOpenSettings = {
+                assistOpen = false
+                onDismissAssist()
+                onOpenAgentSettings()
+            },
+            onDismiss = {
+                assistOpen = false
+                onDismissAssist()
+            },
+        )
+    }
+    StepColumn(actions = { PrimaryButton(stringResource(R.string.add_account_form_verify), onSubmit, enabled = complete) }) {
+        val accent = MaterialTheme.colorScheme.onSecondaryContainer
+        ListItem(
+            onClick = { if (agentReady) assistOpen = true else onOpenAgentSettings() },
+            shapes = cardItemShapes(),
+            colors = ListItemDefaults.colors(
+                containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                contentColor = accent,
+                leadingContentColor = accent,
+                trailingContentColor = accent,
+                supportingContentColor = accent,
+            ),
+            contentPadding = CapsulePadding,
+            leadingContent = { Icon(painterResource(R.drawable.ic_bird), contentDescription = null, modifier = Modifier.size(26.dp)) },
+            trailingContent = { Icon(painterResource(R.drawable.ic_chevron_right), contentDescription = null) },
+            supportingContent = {
+                Text(
+                    when {
+                        filled.isNotEmpty() -> stringResource(R.string.add_account_assist_done, filled.map { stringResource(it) }.joinToString(", "))
+                        agentReady -> stringResource(R.string.add_account_assist_hint)
+                        else -> stringResource(R.string.add_account_assist_off)
+                    },
+                    modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
+                    style = LocalTextStyle.current.prose(),
+                )
+            },
+        ) { Text(stringResource(R.string.add_account_assist_title), style = MaterialTheme.typography.titleMediumEmphasized) }
         Field(
             fields.address, R.string.add_account_field_address, null,
             if (FormField.ADDRESS in invalid) R.string.add_account_error_address else null,
@@ -286,9 +485,11 @@ fun FormStep(providerId: String, fields: AddAccountFields, showErrors: Boolean, 
         )
         val passwordMessage = required(FormField.PASSWORD)
             ?: R.string.add_account_password_hint.takeIf { providerId != Providers.CUSTOM.id }
-        OutlinedSecureTextField(
+        SecureTextField(
             state = fields.password,
             modifier = Modifier.fillMaxWidth(),
+            shape = Pill,
+            colors = pillFieldColors(),
             label = { Text(stringResource(texts.secret)) },
             supportingText = passwordMessage?.let { { Text(stringResource(it)) } },
             isError = FormField.PASSWORD in invalid,
@@ -319,7 +520,7 @@ fun FormStep(providerId: String, fields: AddAccountFields, showErrors: Boolean, 
                     modifier = Modifier.weight(1f),
                     style = MaterialTheme.typography.titleMediumEmphasized,
                 )
-                Icon(if (fields.advancedOpen) Icons.Filled.KeyboardArrowUp else Icons.Filled.KeyboardArrowDown, contentDescription = null)
+                Icon(painterResource(if (fields.advancedOpen) R.drawable.ic_keyboard_arrow_up else R.drawable.ic_keyboard_arrow_down), contentDescription = null)
             }
             AnimatedVisibility(
                 visible = fields.advancedOpen,
@@ -360,7 +561,6 @@ fun FormStep(providerId: String, fields: AddAccountFields, showErrors: Boolean, 
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
-        PrimaryButton(stringResource(R.string.add_account_form_verify), onSubmit)
     }
 }
 
@@ -392,8 +592,8 @@ private fun StageRow(@StringRes title: Int, stage: Stage, providerId: String?, s
         Box(Modifier.size(40.dp), contentAlignment = Alignment.Center) {
             when {
                 stage is Stage.Running -> LoadingIndicator(Modifier.size(40.dp))
-                stage.passed -> Icon(Icons.Filled.Check, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-                stage is Stage.Done -> Icon(Icons.Filled.Warning, contentDescription = null, tint = MaterialTheme.colorScheme.error)
+                stage.passed -> Icon(painterResource(R.drawable.ic_check), contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                stage is Stage.Done -> Icon(painterResource(R.drawable.ic_warning), contentDescription = null, tint = MaterialTheme.colorScheme.error)
             }
         }
         Column(
@@ -418,7 +618,21 @@ private fun StageRow(@StringRes title: Int, stage: Stage, providerId: String?, s
 fun VerifyStep(state: AddAccountUiState, onSave: () -> Unit, onEdit: () -> Unit, onRetry: () -> Unit) {
     val allPassed = state.imap.passed && state.smtp.passed
     val running = state.imap is Stage.Running || state.smtp is Stage.Running
-    StepColumn {
+    StepColumn(
+        actions = {
+            when {
+                allPassed -> {
+                    PrimaryButton(stringResource(R.string.add_account_verify_save), onSave, enabled = !state.busy)
+                    TertiaryButton(stringResource(R.string.add_account_verify_edit), onEdit)
+                }
+                running -> TertiaryButton(stringResource(R.string.add_account_verify_edit), onEdit)
+                else -> {
+                    PrimaryButton(stringResource(R.string.add_account_verify_edit), onEdit)
+                    SecondaryButton(stringResource(R.string.add_account_verify_retry), onRetry)
+                }
+            }
+        },
+    ) {
         StageRow(R.string.add_account_section_imap, state.imap, state.providerId)
         HorizontalDivider()
         StageRow(
@@ -450,56 +664,45 @@ fun VerifyStep(state: AddAccountUiState, onSave: () -> Unit, onEdit: () -> Unit,
                 Text(stringResource(R.string.add_account_saving), style = MaterialTheme.typography.bodyMedium)
             }
         }
-        when {
-            allPassed -> {
-                PrimaryButton(stringResource(R.string.add_account_verify_save), onSave, enabled = !state.busy)
-                TertiaryButton(stringResource(R.string.add_account_verify_edit), onEdit)
-            }
-            running -> TertiaryButton(stringResource(R.string.add_account_verify_edit), onEdit)
-            else -> {
-                PrimaryButton(stringResource(R.string.add_account_verify_edit), onEdit)
-                SecondaryButton(stringResource(R.string.add_account_verify_retry), onRetry)
-            }
-        }
     }
 }
 
 @Composable
 fun SyncStep(state: AddAccountUiState, onRetry: () -> Unit, onContinue: () -> Unit, onSkip: () -> Unit) {
-    StepColumn {
-        when (val outcome = state.sync) {
+    val outcome = state.sync
+    StepColumn(
+        actions = when (outcome) {
+            null -> null
+            SyncOutcome.Synced -> {
+                { PrimaryButton(stringResource(if (state.roles.isEmpty()) R.string.add_account_sync_finish else R.string.add_account_next), onContinue) }
+            }
+            else -> {
+                {
+                    PrimaryButton(stringResource(R.string.add_account_sync_retry), onRetry)
+                    TertiaryButton(stringResource(R.string.add_account_sync_skip), onSkip)
+                }
+            }
+        },
+    ) {
+        when (outcome) {
             null -> Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                 LoadingIndicator(Modifier.size(48.dp))
                 Text(stringResource(R.string.add_account_sync_running), style = MaterialTheme.typography.bodyLarge)
             }
-            SyncOutcome.Synced -> {
-                Column(Modifier.semantics { liveRegion = LiveRegionMode.Polite }, verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(stringResource(R.string.add_account_sync_done_title), style = MaterialTheme.typography.titleLargeEmphasized)
-                    Text(stringResource(R.string.add_account_sync_done_body), style = MaterialTheme.typography.bodyLarge)
-                    if (state.roles.isNotEmpty()) {
-                        Text(stringResource(R.string.add_account_sync_done_roles), style = MaterialTheme.typography.bodyLarge)
-                    }
+            SyncOutcome.Synced -> Column(Modifier.semantics { liveRegion = LiveRegionMode.Polite }, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(stringResource(R.string.add_account_sync_done_title), style = MaterialTheme.typography.titleLargeEmphasized)
+                Text(stringResource(R.string.add_account_sync_done_body), style = MaterialTheme.typography.bodyLarge)
+                if (state.roles.isNotEmpty()) {
+                    Text(stringResource(R.string.add_account_sync_done_roles), style = MaterialTheme.typography.bodyLarge)
                 }
-                PrimaryButton(
-                    stringResource(if (state.roles.isEmpty()) R.string.add_account_sync_finish else R.string.add_account_next),
-                    onContinue,
-                )
             }
-            SyncOutcome.NeedsReauth -> {
-                Column(Modifier.semantics { liveRegion = LiveRegionMode.Polite }, verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(stringResource(R.string.add_account_sync_reauth_title), style = MaterialTheme.typography.titleMediumEmphasized, color = MaterialTheme.colorScheme.error)
-                    Text(stringResource(R.string.add_account_sync_reauth_body), style = MaterialTheme.typography.bodyMedium)
-                }
-                PrimaryButton(stringResource(R.string.add_account_sync_retry), onRetry)
-                TertiaryButton(stringResource(R.string.add_account_sync_skip), onSkip)
+            SyncOutcome.NeedsReauth -> Column(Modifier.semantics { liveRegion = LiveRegionMode.Polite }, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(stringResource(R.string.add_account_sync_reauth_title), style = MaterialTheme.typography.titleMediumEmphasized, color = MaterialTheme.colorScheme.error)
+                Text(stringResource(R.string.add_account_sync_reauth_body), style = MaterialTheme.typography.bodyMedium)
             }
-            is SyncOutcome.Failed -> {
-                Column(Modifier.semantics { liveRegion = LiveRegionMode.Polite }, verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(stringResource(R.string.add_account_sync_failed_lead), style = MaterialTheme.typography.bodyLarge)
-                    FailureText(outcome.failure, null, state.providerId)
-                }
-                PrimaryButton(stringResource(R.string.add_account_sync_retry), onRetry)
-                TertiaryButton(stringResource(R.string.add_account_sync_skip), onSkip)
+            is SyncOutcome.Failed -> Column(Modifier.semantics { liveRegion = LiveRegionMode.Polite }, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(stringResource(R.string.add_account_sync_failed_lead), style = MaterialTheme.typography.bodyLarge)
+                FailureText(outcome.failure, null, state.providerId)
             }
         }
     }
@@ -532,7 +735,7 @@ private fun OptionRow(label: String, selected: Boolean, enabled: Boolean, onClic
 
 @Composable
 fun RolesStep(state: AddAccountUiState, onSelect: (FolderRole, String?) -> Unit, onConfirm: () -> Unit) {
-    StepColumn {
+    StepColumn(actions = { PrimaryButton(stringResource(R.string.add_account_roles_done), onConfirm, enabled = !state.busy) }) {
         Text(stringResource(R.string.add_account_roles_intro), style = MaterialTheme.typography.bodyLarge)
         state.roles.forEach { prompt ->
             val taken = state.roles.filter { it.role != prompt.role }.mapNotNull { it.selected }.toSet()
@@ -552,6 +755,5 @@ fun RolesStep(state: AddAccountUiState, onSelect: (FolderRole, String?) -> Unit,
                 }
             }
         }
-        PrimaryButton(stringResource(R.string.add_account_roles_done), onConfirm, enabled = !state.busy)
     }
 }

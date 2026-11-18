@@ -90,6 +90,16 @@ class MimeComposerTest {
     }
 
     @Test
+    fun longThreadsFoldTheReferencesHeaderAndKeepIdsThatHaveNoAtSign() {
+        val ids = (1..40).map { "<message-number-$it-with-a-long-local-part@mail.example.net>" } + "<legacy-id-without-at-sign>"
+        val raw = MimeComposer.compose(message(inReplyTo = "<legacy-id-without-at-sign>", references = ids)).raw
+        assertTrue(String(raw, Charsets.ISO_8859_1).headerBlock().lines().all { it.length <= 78 })
+        val headers = MessageParser.headers(MessageParser.parseRaw(raw), emptyList())
+        assertEquals(ids, headers.references)
+        assertEquals("<legacy-id-without-at-sign>", headers.inReplyTo)
+    }
+
+    @Test
     fun invalidOrMissingRecipientsAreRejected() {
         assertFailsWith<IllegalArgumentException> { MimeComposer.compose(message(to = emptyList(), cc = emptyList(), bcc = emptyList())) }
         assertFailsWith<IllegalArgumentException> { MimeComposer.compose(message(to = listOf(EmailAddress("broken")))) }

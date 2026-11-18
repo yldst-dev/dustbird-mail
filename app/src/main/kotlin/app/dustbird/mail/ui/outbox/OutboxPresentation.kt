@@ -13,6 +13,8 @@ enum class OutboxAction(@StringRes val label: Int) {
     CONFIRM_SENT(R.string.outbox_action_confirm_sent),
     RESEND(R.string.outbox_action_resend),
     RETRY_SAVE(R.string.outbox_action_retry_save),
+    SEND_NOW(R.string.outbox_action_send_now),
+    CANCEL_HOLD(R.string.outbox_action_cancel_hold),
 }
 
 data class OutboxPresentation(
@@ -24,8 +26,15 @@ data class OutboxPresentation(
     val failed: Boolean = false,
 )
 
-fun outboxPresentation(state: SendState, failure: String?): OutboxPresentation = when (state) {
-    SendState.DRAFT, SendState.QUEUED -> OutboxPresentation(
+fun outboxPresentation(state: SendState, failure: String?, heldUntil: String? = null): OutboxPresentation = when (state) {
+    SendState.DRAFT, SendState.QUEUED -> if (heldUntil != null) {
+        OutboxPresentation(
+            status = R.string.outbox_status_scheduled,
+            detail = R.string.outbox_detail_scheduled,
+            detailArg = heldUntil,
+            actions = listOf(OutboxAction.SEND_NOW, OutboxAction.CANCEL_HOLD),
+        )
+    } else OutboxPresentation(
         status = R.string.outbox_status_queued,
         detail = if (failure == null) R.string.outbox_detail_queued else R.string.outbox_detail_queued_retry,
         inProgress = true,
@@ -54,6 +63,14 @@ fun outboxPresentation(state: SendState, failure: String?): OutboxPresentation =
 private fun failedPresentation(failure: String?): OutboxPresentation {
     val kind = failure?.substringBefore('|')
     val code = failure?.substringAfter('|', "")?.takeIf { it.isNotEmpty() }
+    if (kind == FailureCodes.COMPOSE) {
+        return OutboxPresentation(
+            status = R.string.outbox_status_failed,
+            detail = R.string.outbox_detail_failed_compose,
+            actions = listOf(OutboxAction.CANCEL_HOLD, OutboxAction.DISCARD),
+            failed = true,
+        )
+    }
     val detail = when (kind) {
         RejectKind.AUTH.name -> R.string.outbox_detail_failed_auth
         RejectKind.TLS.name -> R.string.outbox_detail_failed_tls

@@ -15,6 +15,7 @@ object SessionConfig {
     fun imap(endpoint: ServerEndpoint): Properties = base("imap", endpoint).apply {
         put("mail.imap.peek", "true")
         put("mail.imap.partialfetch", "true")
+        put("mail.imap.fetchsize", "262144")
         put("mail.imap.auth.mechanisms", "PLAIN LOGIN")
     }
 

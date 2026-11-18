@@ -1,5 +1,6 @@
 package app.dustbird.mail.ui.mailbox
 
+import androidx.compose.ui.semantics.role
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import app.dustbird.mail.AppContainer
@@ -16,9 +17,10 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
@@ -31,6 +33,10 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import app.dustbird.mail.core.model.FolderRole
+import app.dustbird.mail.data.repo.MoveTicket
+import app.dustbird.mail.data.repo.MoveTarget
+import app.dustbird.mail.data.repo.MessageFilter
 
 private const val PAGE_SIZE = 100
 
@@ -62,14 +68,17 @@ class MailboxViewModel(private val container: AppContainer) : ViewModel() {
     private val loadingOlder = MutableStateFlow(false)
     private val exhausted = MutableStateFlow<Set<FolderKey>>(emptySet())
     private val selectedId = MutableStateFlow<Long?>(null)
-    private val _notices = MutableSharedFlow<Int>(extraBufferCapacity = 1)
-
-    val notices: SharedFlow<Int> = _notices
+    private val filter = MutableStateFlow(MessageFilter.ALL)
+    private val selection = MutableStateFlow<Set<Long>>(emptySet())
+    private val _events = Channel<MailboxEvent>(Channel.BUFFERED)
+    val events: Flow<MailboxEvent> = _events.receiveAsFlow().filter { it !is MailboxEvent.Moved || container.actions.isPending(it.ticket) }
+    private val _confirmDelete = MutableStateFlow<List<Long>?>(null)
+    val confirmDelete: StateFlow<List<Long>?> = _confirmDelete
 
     private val messages: Flow<List<MessageSummary>?> = scope.flatMapLatest { target ->
         flow {
             emit(null)
-            emitAll(limit.flatMapLatest { container.mail.messages(target, it) })
+            emitAll(combine(limit, filter, ::Pair).flatMapLatest { (size, chosen) -> container.mail.messages(target, size, chosen) })
         }
     }
 
@@ -86,7 +95,9 @@ class MailboxViewModel(private val container: AppContainer) : ViewModel() {
 
     private val outboxPending = container.send.items.map { items -> items.count { it.state in unsettledSendStates } }.distinctUntilChanged()
 
-    val state: StateFlow<MailboxUiState?> = combine(content, status, outboxPending, selectedId) { content, status, pending, selected ->
+    private val extras = combine(filter, selection, container.mail.folders()) { chosen, picked, folders -> Triple(chosen, picked, folders) }
+
+    val state: StateFlow<MailboxUiState?> = combine(content, status, outboxPending, selectedId, extras) { content, status, pending, selected, extra ->
         val scopeAccounts = scopeAccountsOf(content.scope, content.accounts)
         val targets = olderTargetsOf(content.scope, content.accounts)
         MailboxUiState(
@@ -103,13 +114,106 @@ class MailboxViewModel(private val container: AppContainer) : ViewModel() {
             hasMore = content.messages != null && (content.messages.size >= status.limit || targets.any { it !in status.exhausted }),
             outboxPending = pending,
             selectedId = selected,
+            filter = extra.first,
+            folders = extra.third,
+            selection = extra.second.intersect(content.messages.orEmpty().map { it.id }.toSet()),
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
-    init {
-        refresh()
+    val collapsedAccounts: StateFlow<Set<Long>> = container.settings.collapsedAccounts.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptySet())
+
+    fun toggleAccount(accountId: Long) {
+        viewModelScope.launch { container.settings.toggleCollapsedAccount(accountId) }
     }
 
+    init {
+        refresh()
+        viewModelScope.launch {
+            container.actions.started.collect { started ->
+                val ticket = started.ticket
+                if (ticket.skipped > 0) _events.trySend(MailboxEvent.Notice(R.string.mailbox_move_unavailable))
+                if (ticket.count > 0) {
+                    val text = when {
+                        started.permanent -> R.string.mailbox_moved_deleted
+                        started.target == MoveTarget.Role(FolderRole.TRASH) -> R.string.mailbox_moved_trash
+                        started.target == MoveTarget.Role(FolderRole.ARCHIVE) -> R.string.mailbox_moved_archive
+                        started.target == MoveTarget.Role(FolderRole.SPAM) -> R.string.mailbox_moved_spam
+                        else -> R.string.mailbox_moved_folder
+                    }
+                    _events.trySend(MailboxEvent.Moved(ticket, text))
+                }
+            }
+        }
+        viewModelScope.launch {
+            container.actions.failures.collect { _events.trySend(MailboxEvent.Notice(R.string.mailbox_move_failed, listOf(it))) }
+        }
+    }
+
+    fun setFilter(value: MessageFilter) {
+        filter.value = value
+        limit.value = PAGE_SIZE
+        selection.value = emptySet()
+    }
+
+    val draftCount: StateFlow<Int> = container.drafts.drafts.map { it.size }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0)
+
+    suspend fun draftFor(messageId: Long): Long? {
+        val message = container.db.messages().get(messageId) ?: return null
+        val header = message.messageId ?: return null
+        return container.db.drafts().byMessageId(message.accountId, header)?.id?.takeIf { container.db.outbox().byDraft(it).isEmpty() }
+    }
+
+    fun toggleSelection(id: Long) = selection.update { if (id in it) it - id else it + id }
+
+    fun clearSelection() {
+        selection.value = emptySet()
+    }
+
+    fun selectAll() {
+        selection.value = state.value?.messages.orEmpty().map { it.id }.toSet()
+    }
+
+    fun move(ids: Collection<Long>, target: MoveTarget) {
+        val list = ids.toList()
+        if (list.isEmpty()) return
+        selection.update { it - list.toSet() }
+        if (selectedId.value in list) selectedId.value = null
+        container.scope.launch { container.actions.start(list, target) }
+    }
+
+    fun delete(ids: Collection<Long>) {
+        val list = ids.toList()
+        if (list.isEmpty()) return
+        viewModelScope.launch {
+            if (container.actions.deletesPermanently(list)) _confirmDelete.value = list else move(list, MoveTarget.Role(FolderRole.TRASH))
+        }
+    }
+
+    fun answerDeleteConfirm(confirmed: Boolean) {
+        val ids = _confirmDelete.value
+        _confirmDelete.value = null
+        if (confirmed && ids != null) move(ids, MoveTarget.Role(FolderRole.TRASH))
+    }
+
+    fun undo(ticket: MoveTicket) = container.actions.undo(ticket)
+
+    fun commit(ticket: MoveTicket) = container.actions.commitNow(ticket)
+
+    fun setSeen(ids: Collection<Long>, seen: Boolean) {
+        val list = ids.toList()
+        if (list.isEmpty()) return
+        selection.value = emptySet()
+        container.scope.launch { container.mail.setSeen(list, seen) }
+    }
+
+    fun setFlagged(ids: Collection<Long>, flagged: Boolean) {
+        val list = ids.toList()
+        if (list.isEmpty()) return
+        selection.value = emptySet()
+        container.scope.launch {
+            if (!container.mail.setFlagged(list, flagged)) _events.trySend(MailboxEvent.Notice(R.string.mailbox_star_failed))
+        }
+    }
     fun select(id: Long?) {
         selectedId.value = id
     }
@@ -119,16 +223,19 @@ class MailboxViewModel(private val container: AppContainer) : ViewModel() {
         scope.value = target
         limit.value = PAGE_SIZE
         selectedId.value = null
+        selection.value = emptySet()
+        if (target is MailboxScope.Folder && !refresh()) container.scope.launch { container.sync.syncFolder(target.folderId) }
     }
 
-    fun refresh() {
-        if (!refreshing.compareAndSet(false, true)) return
+    fun refresh(): Boolean {
+        if (!refreshing.compareAndSet(false, true)) return false
         val target = scope.value
         container.scope.launch {
             try {
                 when (target) {
                     MailboxScope.Unified -> container.sync.syncAll()
                     is MailboxScope.Account -> container.sync.syncAccount(target.accountId)
+                    is MailboxScope.Folder -> container.sync.syncFolder(target.folderId)
                 }
             } catch (error: CancellationException) {
                 throw error
@@ -138,6 +245,7 @@ class MailboxViewModel(private val container: AppContainer) : ViewModel() {
                 refreshing.value = false
             }
         }
+        return true
     }
 
     fun loadOlder() {
@@ -148,10 +256,22 @@ class MailboxViewModel(private val container: AppContainer) : ViewModel() {
             try {
                 val pending = olderTargetsOf(target, container.accounts.accounts.first()).filter { it !in exhausted.value }
                 val results = coroutineScope {
-                    pending.map { key -> async { key to attempt { container.sync.loadOlder(key.accountId, key.role) } } }.awaitAll()
+                    pending.map { key ->
+                        async {
+                            key to attempt {
+                                val folderId = key.folderId
+                                val role = key.role
+                                when {
+                                    folderId != null -> container.sync.loadOlderFolder(folderId)
+                                    role != null -> container.sync.loadOlder(key.accountId, role)
+                                    else -> 0
+                                }
+                            }
+                        }
+                    }.awaitAll()
                 }
                 exhausted.update { done -> done + results.filter { it.second == 0 }.map { it.first } }
-                if (results.any { it.second == null }) _notices.tryEmit(R.string.mailbox_older_failed)
+                if (results.any { it.second == null }) _events.trySend(MailboxEvent.Notice(R.string.mailbox_older_failed))
             } finally {
                 loadingOlder.value = false
             }

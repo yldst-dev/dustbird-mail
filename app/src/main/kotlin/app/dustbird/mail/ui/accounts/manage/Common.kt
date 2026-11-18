@@ -5,65 +5,68 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.KeyboardArrowDown
-import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.ButtonGroup
-import androidx.compose.material3.ButtonGroupDefaults
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.TextField
+import androidx.compose.material3.ToggleButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import app.dustbird.mail.R
 import app.dustbird.mail.core.model.ConnectionStages
 import app.dustbird.mail.core.model.StageState
+import app.dustbird.mail.ui.theme.FlatCard
+import app.dustbird.mail.ui.theme.GroupTitle
+import app.dustbird.mail.ui.theme.Pill
 import app.dustbird.mail.ui.theme.accountAccent
+import app.dustbird.mail.ui.theme.capsuleShape
+import app.dustbird.mail.ui.theme.pillFieldColors
+import app.dustbird.mail.ui.theme.pillToggleShapes
 
 @Composable
 fun Section(@StringRes title: Int, modifier: Modifier = Modifier, content: @Composable ColumnScope.() -> Unit) {
-    Column(
-        modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 20.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-        Text(
-            stringResource(title),
-            style = MaterialTheme.typography.titleLargeEmphasized,
-            modifier = Modifier.semantics { heading() },
-        )
-        content()
+    Column(modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
+        GroupTitle(stringResource(title))
+        FlatCard {
+            Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp), content = content)
+        }
     }
 }
 
-@OptIn(ExperimentalMaterial3ExpressiveApi::class)
+@OptIn(ExperimentalMaterial3ExpressiveApi::class, ExperimentalLayoutApi::class)
 @Composable
 fun <T> ChoiceGroup(options: List<Pair<T, String>>, selected: T, onSelect: (T) -> Unit, modifier: Modifier = Modifier) {
-    ButtonGroup(
-        overflowIndicator = { ButtonGroupDefaults.OverflowIndicator(menuState = it) },
-        modifier = modifier.fillMaxWidth(),
-    ) {
+    FlowRow(modifier.fillMaxWidth().selectableGroup(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         options.forEach { (value, label) ->
-            toggleableItem(checked = value == selected, label = label, onCheckedChange = { if (it) onSelect(value) })
+            ToggleButton(
+                checked = value == selected,
+                onCheckedChange = { if (it) onSelect(value) },
+                shapes = pillToggleShapes(),
+                modifier = Modifier.semantics { role = Role.RadioButton },
+            ) { Text(label) }
         }
     }
 }
@@ -78,6 +81,7 @@ fun ConfirmDialog(
     destructive: Boolean = false,
 ) {
     AlertDialog(
+        shape = capsuleShape(),
         onDismissRequest = onDismiss,
         title = { Text(stringResource(title)) },
         text = { Column(Modifier.verticalScroll(rememberScrollState())) { Text(text) } },
@@ -85,7 +89,7 @@ fun ConfirmDialog(
             TextButton(
                 onClick = onConfirm,
                 colors = if (destructive) ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error) else ButtonDefaults.textButtonColors(),
-            ) { Text(stringResource(confirm), fontWeight = if (destructive) FontWeight.Bold else null) }
+            ) { Text(stringResource(confirm)) }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.accounts_cancel)) } },
     )
@@ -103,11 +107,13 @@ fun FormField(
     support: String? = null,
 ) {
     val message = error ?: support
-    OutlinedTextField(
+    TextField(
         value = value,
         onValueChange = onValueChange,
         label = { Text(stringResource(label)) },
         modifier = modifier.fillMaxWidth(),
+        shape = if (singleLine) Pill else MaterialTheme.shapes.large,
+        colors = pillFieldColors(),
         singleLine = singleLine,
         minLines = if (singleLine) 1 else 3,
         isError = error != null,
@@ -128,8 +134,7 @@ fun StageList(stages: ConnectionStages, modifier: Modifier = Modifier) {
                 Text(stringResource(label), Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
                 Text(
                     stringResource(state.labelRes()),
-                    style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = if (state == StageState.UNKNOWN) FontWeight.Normal else FontWeight.Bold,
+                    style = if (state == StageState.UNKNOWN) MaterialTheme.typography.bodyMedium else MaterialTheme.typography.bodyMediumEmphasized,
                     color = when (state) {
                         StageState.UNKNOWN -> MaterialTheme.colorScheme.onSurfaceVariant
                         StageState.OK -> MaterialTheme.colorScheme.primary
@@ -149,7 +154,7 @@ fun AccentLabel(text: String, accentIndex: Int?, modifier: Modifier = Modifier) 
         val accent = accountAccent(accentIndex)
         Text(
             text,
-            modifier.background(accent.container, MaterialTheme.shapes.small).padding(horizontal = 8.dp, vertical = 2.dp),
+            modifier.background(accent.container, Pill).padding(horizontal = 8.dp, vertical = 2.dp),
             style = MaterialTheme.typography.labelLarge,
             color = accent.content,
         )
@@ -167,7 +172,7 @@ fun MoveButtons(
     modifier: Modifier = Modifier,
 ) {
     Column(modifier) {
-        IconButton(onClick = onMoveUp, enabled = canMoveUp) { Icon(Icons.Filled.KeyboardArrowUp, upDescription) }
-        IconButton(onClick = onMoveDown, enabled = canMoveDown) { Icon(Icons.Filled.KeyboardArrowDown, downDescription) }
+        IconButton(onClick = onMoveUp, enabled = canMoveUp) { Icon(painterResource(R.drawable.ic_keyboard_arrow_up), upDescription) }
+        IconButton(onClick = onMoveDown, enabled = canMoveDown) { Icon(painterResource(R.drawable.ic_keyboard_arrow_down), downDescription) }
     }
 }

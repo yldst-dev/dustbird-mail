@@ -12,22 +12,17 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.FilledTonalButton
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -40,14 +35,17 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import android.text.format.DateUtils
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalResources
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.dustbird.mail.R
@@ -55,14 +53,21 @@ import app.dustbird.mail.core.send.SendState
 import app.dustbird.mail.data.db.OutboxEntity
 import app.dustbird.mail.ui.appViewModel
 import app.dustbird.mail.ui.mailbox.AccountLabel
+import app.dustbird.mail.ui.mailbox.IdentityLabel
+import app.dustbird.mail.ui.mailbox.rememberAnimationsEnabled
 import app.dustbird.mail.ui.mailbox.rememberMessageTimeFormatter
+import app.dustbird.mail.ui.theme.Capsule
+import app.dustbird.mail.ui.theme.CapsuleGap
+import app.dustbird.mail.ui.theme.FlatSnackbarHost
+import app.dustbird.mail.ui.theme.capsuleShape
+import app.dustbird.mail.ui.theme.groupedTopAppBarColors
 import java.time.Instant
 
 private data class Confirmation(val id: Long, val action: OutboxAction, val state: SendState)
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
 @Composable
-fun OutboxRoute(onBack: () -> Unit) {
+fun OutboxRoute(onBack: () -> Unit, onEditDraft: (Long) -> Unit = {}) {
     val viewModel = appViewModel { OutboxViewModel(it) }
     val items by viewModel.items.collectAsStateWithLifecycle()
     val accounts by viewModel.accounts.collectAsStateWithLifecycle()
@@ -70,23 +75,27 @@ fun OutboxRoute(onBack: () -> Unit) {
     val busy by viewModel.busy.collectAsStateWithLifecycle()
     val snackbar = remember { SnackbarHostState() }
     val resources = LocalResources.current
+    val context = LocalContext.current
     val formatter = rememberMessageTimeFormatter()
     var confirmation by remember { mutableStateOf<Confirmation?>(null) }
 
     LaunchedEffect(viewModel, resources) { viewModel.notices.collect { snackbar.showSnackbar(resources.getString(it)) } }
+    LaunchedEffect(viewModel) { viewModel.edits.collect { onEditDraft(it) } }
 
     Scaffold(
+        containerColor = MaterialTheme.colorScheme.surfaceContainer,
         topBar = {
             TopAppBar(
+                colors = groupedTopAppBarColors(),
                 title = { Text(stringResource(R.string.outbox_title), modifier = Modifier.semantics { heading() }) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.outbox_back))
+                        Icon(painterResource(R.drawable.ic_arrow_back), contentDescription = stringResource(R.string.outbox_back))
                     }
                 },
             )
         },
-        snackbarHost = { SnackbarHost(snackbar) },
+        snackbarHost = { FlatSnackbarHost(snackbar) },
     ) { padding ->
         val list = items
         when {
@@ -106,13 +115,26 @@ fun OutboxRoute(onBack: () -> Unit) {
             else -> {
                 val now = remember(list) { Instant.now() }
                 val indexed = remember(accounts) { accounts.withIndex().associateBy { it.value.id } }
-                LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(top = padding.calculateTopPadding(), bottom = padding.calculateBottomPadding() + 24.dp)) {
-                    items(list, key = { it.id }) { item ->
+                val animations = rememberAnimationsEnabled()
+                val effects = MaterialTheme.motionScheme.defaultEffectsSpec<Float>()
+                val spatial = MaterialTheme.motionScheme.defaultSpatialSpec<IntOffset>()
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = padding.calculateTopPadding(), bottom = padding.calculateBottomPadding() + 24.dp),
+                    verticalArrangement = Arrangement.spacedBy(CapsuleGap),
+                ) {
+                    itemsIndexed(list, key = { _, item -> item.id }) { index, item ->
                         val account = indexed[item.accountId]
-                        Column {
+                        Capsule(if (animations) Modifier.animateItem(effects, spatial, effects) else Modifier) {
                             OutboxRow(
                                 item = item,
-                                presentation = outboxPresentation(item.state, item.failure),
+                                presentation = outboxPresentation(
+                                    item.state,
+                                    item.failure,
+                                    heldUntil = item.sendAfter.takeIf { item.draftId != null && it > now.toEpochMilli() }?.let {
+                                        DateUtils.formatDateTime(context, it, DateUtils.FORMAT_SHOW_DATE or DateUtils.FORMAT_SHOW_TIME or DateUtils.FORMAT_ABBREV_MONTH)
+                                    },
+                                ),
                                 time = formatter.format(item.createdAt, now),
                                 accountLabel = if (accounts.size > 1) account?.value?.label else null,
                                 accountIndex = account?.index ?: 0,
@@ -126,7 +148,6 @@ fun OutboxRoute(onBack: () -> Unit) {
                                     }
                                 },
                             )
-                            HorizontalDivider(Modifier.padding(horizontal = 16.dp))
                         }
                     }
                 }
@@ -137,6 +158,7 @@ fun OutboxRoute(onBack: () -> Unit) {
     confirmation?.let { pending ->
         val resend = pending.action == OutboxAction.RESEND
         AlertDialog(
+            shape = capsuleShape(),
             onDismissRequest = { confirmation = null },
             title = { Text(stringResource(if (resend) R.string.outbox_confirm_resend_title else R.string.outbox_confirm_discard_title)) },
             text = {
@@ -210,19 +232,7 @@ private fun OutboxRow(
                 itemVerticalAlignment = Alignment.CenterVertically,
             ) {
                 if (accountLabel != null) AccountLabel(accountLabel, accountIndex)
-                if (identityLabel != null) {
-                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Text(stringResource(R.string.outbox_sender_identity), style = MaterialTheme.typography.labelMedium, color = scheme.onSurfaceVariant, maxLines = 1)
-                        Text(
-                            text = identityLabel,
-                            style = MaterialTheme.typography.labelMedium,
-                            fontWeight = FontWeight.SemiBold,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.weight(1f, fill = false),
-                        )
-                    }
-                }
+                if (identityLabel != null) IdentityLabel(stringResource(R.string.outbox_sender_identity), identityLabel)
             }
         }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -241,11 +251,11 @@ private fun OutboxRow(
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 presentation.actions.forEachIndexed { index, action ->
                     if (index == 0) {
-                        FilledTonalButton(onClick = { onAction(action) }, enabled = !busy, shapes = ButtonDefaults.shapes()) {
+                        FilledTonalButton(onClick = { onAction(action) }, enabled = !busy) {
                             Text(stringResource(action.label))
                         }
                     } else {
-                        OutlinedButton(onClick = { onAction(action) }, enabled = !busy, shapes = ButtonDefaults.shapes()) {
+                        OutlinedButton(onClick = { onAction(action) }, enabled = !busy) {
                             Text(stringResource(action.label))
                         }
                     }

@@ -1,7 +1,24 @@
 package app.dustbird.mail.ui.compose
 
 import android.app.Application
-import android.provider.Settings
+import android.text.format.DateFormat
+import android.text.format.DateUtils
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.material3.DatePicker
+import androidx.compose.material3.DatePickerDialog
+import androidx.compose.material3.SelectableDates
+import androidx.compose.material3.SplitButtonDefaults
+import androidx.compose.material3.SplitButtonLayout
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.TimePicker
+import androidx.compose.material3.rememberDatePickerState
+import androidx.compose.material3.rememberTimePickerState
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.semantics.contentDescription
+import java.time.Instant
+import java.time.LocalDate
+import java.time.ZoneId
+import java.time.ZoneOffset
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.annotation.StringRes
@@ -29,15 +46,8 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.Send
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.Icon
@@ -45,10 +55,10 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.adaptive.currentWindowAdaptiveInfoV2
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -62,6 +72,7 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.liveRegion
@@ -76,12 +87,19 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import androidx.window.core.layout.WindowSizeClass
-import androidx.compose.material3.adaptive.currentWindowAdaptiveInfoV2
 import app.dustbird.mail.R
 import app.dustbird.mail.core.model.SendVerification
 import app.dustbird.mail.ui.LocalAppContainer
+import app.dustbird.mail.ui.mailbox.rememberAnimationsEnabled
 import app.dustbird.mail.ui.nav.ComposeArgs
 import app.dustbird.mail.ui.nav.ComposeMode
+import app.dustbird.mail.ui.theme.FlatMenu
+import app.dustbird.mail.ui.theme.MenuEntry
+import app.dustbird.mail.ui.theme.FlatSnackbarHost
+import app.dustbird.mail.ui.theme.capsuleShape
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.activity.compose.rememberLauncherForActivityResult
 
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
@@ -111,17 +129,31 @@ fun ComposeRoute(args: ComposeArgs, onClose: () -> Unit) {
             onClose()
         }
     }
+    LaunchedEffect(vm.exit) {
+        when (val exit = vm.exit) {
+            ComposeExit.Held -> onClose()
+            is ComposeExit.Scheduled -> {
+                val time = DateUtils.formatDateTime(context, exit.at, DateUtils.FORMAT_SHOW_DATE or DateUtils.FORMAT_SHOW_TIME or DateUtils.FORMAT_ABBREV_MONTH)
+                Toast.makeText(context.applicationContext, resources.getString(R.string.compose_scheduled, time), Toast.LENGTH_LONG).show()
+                onClose()
+            }
+            null -> Unit
+        }
+    }
     var showSheet by remember { mutableStateOf(false) }
     val busy = phase != SendPhase.Idle
+    val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { vm.attach(it) }
 
     Scaffold(
-        snackbarHost = { SnackbarHost(snackbar) },
+        snackbarHost = { FlatSnackbarHost(snackbar) },
         topBar = {
             ComposeTopBar(
                 title = titleOf(args),
                 sending = busy,
                 onLeave = leave,
-                onSend = vm::send,
+                onSend = vm::sendNow,
+                onSchedule = vm::schedule,
+                onAttach = { picker.launch(arrayOf("*/*")) },
                 onSave = vm::saveDraft,
                 onDiscard = {
                     if (vm.hasWork()) {
@@ -155,6 +187,64 @@ fun ComposeRoute(args: ComposeArgs, onClose: () -> Unit) {
     ComposeDialogs(vm, phase, onClose, onChangeSender = { showSheet = true })
 }
 
+private fun tomorrowAt(hour: Int): Long =
+    LocalDate.now().plusDays(1).atTime(hour, 0).atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ScheduleDialog(onPick: (Long) -> Unit, onDismiss: () -> Unit) {
+    val today = remember { LocalDate.now() }
+    val firstDay = remember(today) { today.atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli() }
+    val date = rememberDatePickerState(
+        initialSelectedDateMillis = today.plusDays(1).atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli(),
+        selectableDates = object : SelectableDates {
+            override fun isSelectableDate(utcTimeMillis: Long): Boolean = utcTimeMillis >= firstDay
+
+            override fun isSelectableYear(year: Int): Boolean = year >= today.year
+        },
+    )
+    val time = rememberTimePickerState(initialHour = 9, initialMinute = 0, is24Hour = DateFormat.is24HourFormat(LocalContext.current))
+    var pickingTime by rememberSaveable { mutableStateOf(false) }
+    var past by remember { mutableStateOf(false) }
+    if (!pickingTime) {
+        DatePickerDialog(
+            onDismissRequest = onDismiss,
+            confirmButton = {
+                TextButton(onClick = { pickingTime = true }, enabled = date.selectedDateMillis != null) { Text(stringResource(R.string.compose_schedule_next)) }
+            },
+            dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.compose_schedule_cancel)) } },
+        ) { DatePicker(state = date) }
+    } else {
+        AlertDialog(
+            onDismissRequest = onDismiss,
+            title = { Text(stringResource(R.string.compose_schedule_time_title)) },
+            text = {
+                Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    TimePicker(state = time)
+                    if (past) {
+                        Text(
+                            stringResource(R.string.compose_schedule_past),
+                            color = MaterialTheme.colorScheme.error,
+                            style = MaterialTheme.typography.bodyMedium,
+                            modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        val day = Instant.ofEpochMilli(date.selectedDateMillis ?: firstDay).atZone(ZoneOffset.UTC).toLocalDate()
+                        val at = day.atTime(time.hour, time.minute).atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
+                        if (at <= System.currentTimeMillis() + 60_000) past = true else onPick(at)
+                    },
+                ) { Text(stringResource(R.string.compose_schedule_confirm)) }
+            },
+            dismissButton = { TextButton(onClick = { pickingTime = false }) { Text(stringResource(R.string.compose_schedule_back)) } },
+        )
+    }
+}
+
 @StringRes
 private fun titleOf(args: ComposeArgs): Int = when {
     args.draftId != null -> R.string.compose_title_draft
@@ -171,52 +261,94 @@ private fun ComposeTopBar(
     sending: Boolean,
     onLeave: () -> Unit,
     onSend: () -> Unit,
+    onSchedule: (Long) -> Unit,
+    onAttach: () -> Unit,
     onSave: () -> Unit,
     onDiscard: () -> Unit,
 ) {
     var menuOpen by remember { mutableStateOf(false) }
+    var scheduleOpen by remember { mutableStateOf(false) }
+    var picking by rememberSaveable { mutableStateOf(false) }
+    val scheduleLabel = stringResource(R.string.compose_schedule)
+    if (picking) {
+        ScheduleDialog(
+            onPick = {
+                picking = false
+                onSchedule(it)
+            },
+            onDismiss = { picking = false },
+        )
+    }
     TopAppBar(
         title = { Text(stringResource(title), maxLines = 1, overflow = TextOverflow.Ellipsis) },
         navigationIcon = {
-            IconButton(onClick = onLeave) { Icon(Icons.Filled.Close, contentDescription = stringResource(R.string.compose_close)) }
+            IconButton(onClick = onLeave) { Icon(painterResource(R.drawable.ic_close), contentDescription = stringResource(R.string.compose_close)) }
         },
         actions = {
-            Button(
-                onClick = onSend,
-                enabled = !sending,
-                shapes = ButtonDefaults.shapes(),
-                modifier = Modifier.heightIn(min = 48.dp).testTag("compose_send"),
-            ) {
-                if (sending) {
-                    LoadingIndicator(Modifier.size(24.dp))
-                    Spacer(Modifier.width(8.dp))
-                    Text(stringResource(R.string.compose_sending))
-                } else {
-                    Icon(Icons.AutoMirrored.Filled.Send, contentDescription = null, modifier = Modifier.size(18.dp))
-                    Spacer(Modifier.width(8.dp))
-                    Text(stringResource(R.string.compose_send))
-                }
+            IconButton(onClick = onAttach, enabled = !sending) {
+                Icon(painterResource(R.drawable.ic_attach_file), contentDescription = stringResource(R.string.compose_attach))
             }
+            SplitButtonLayout(
+                leadingButton = {
+                    SplitButtonDefaults.LeadingButton(
+                        onClick = onSend,
+                        enabled = !sending,
+                        modifier = Modifier.heightIn(min = 48.dp).testTag("compose_send"),
+                    ) {
+                        if (sending) {
+                            LoadingIndicator(Modifier.size(24.dp))
+                            Spacer(Modifier.width(8.dp))
+                            Text(stringResource(R.string.compose_sending))
+                        } else {
+                            Icon(painterResource(R.drawable.ic_send), contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(Modifier.width(8.dp))
+                            Text(stringResource(R.string.compose_send))
+                        }
+                    }
+                },
+                trailingButton = {
+                    Box {
+                        val turn by animateFloatAsState(if (scheduleOpen) 180f else 0f, MaterialTheme.motionScheme.fastSpatialSpec(), label = "schedule arrow")
+                        SplitButtonDefaults.TrailingButton(
+                            checked = scheduleOpen,
+                            onCheckedChange = { scheduleOpen = it },
+                            enabled = !sending,
+                            modifier = Modifier.heightIn(min = 48.dp).testTag("compose_schedule").semantics { contentDescription = scheduleLabel },
+                        ) {
+                            Icon(
+                                painterResource(R.drawable.ic_keyboard_arrow_down),
+                                contentDescription = null,
+                                modifier = Modifier.size(SplitButtonDefaults.TrailingIconSize).graphicsLayer { rotationZ = turn },
+                            )
+                        }
+                        FlatMenu(
+                            expanded = scheduleOpen,
+                            onDismissRequest = { scheduleOpen = false },
+                            groups = listOf(
+                                listOf(
+                                    MenuEntry(R.string.compose_schedule_tomorrow_morning, R.drawable.ic_schedule_send) { onSchedule(tomorrowAt(8)) },
+                                    MenuEntry(R.string.compose_schedule_tomorrow_afternoon, R.drawable.ic_schedule_send) { onSchedule(tomorrowAt(13)) },
+                                ),
+                                listOf(MenuEntry(R.string.compose_schedule_pick, R.drawable.ic_calendar_month) { picking = true }),
+                            ),
+                        )
+                    }
+                },
+            )
             Box {
                 IconButton(onClick = { menuOpen = true }, enabled = !sending) {
-                    Icon(Icons.Filled.MoreVert, contentDescription = stringResource(R.string.compose_more))
+                    Icon(painterResource(R.drawable.ic_more_vert), contentDescription = stringResource(R.string.compose_more))
                 }
-                DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
-                    DropdownMenuItem(
-                        text = { Text(stringResource(R.string.compose_menu_save)) },
-                        onClick = {
-                            menuOpen = false
-                            onSave()
-                        },
-                    )
-                    DropdownMenuItem(
-                        text = { Text(stringResource(R.string.compose_menu_discard)) },
-                        onClick = {
-                            menuOpen = false
-                            onDiscard()
-                        },
-                    )
-                }
+                FlatMenu(
+                    expanded = menuOpen,
+                    onDismissRequest = { menuOpen = false },
+                    groups = listOf(
+                        listOf(
+                            MenuEntry(R.string.compose_menu_save, R.drawable.ic_draft, onSave),
+                            MenuEntry(R.string.compose_menu_discard, R.drawable.ic_delete, onDiscard),
+                        ),
+                    ),
+                )
             }
         },
     )
@@ -308,6 +440,8 @@ private fun ComposeForm(vm: ComposeViewModel, phase: SendPhase, busy: Boolean, p
             RecipientRow(
                 label = stringResource(R.string.compose_label_to),
                 field = vm.to,
+                suggestions = vm.suggestions(vm.to),
+                onPick = { vm.pick(vm.to, it) },
                 enabled = enabled,
                 tag = "compose_to",
                 emptyError = problem == RecipientProblem.EMPTY,
@@ -335,6 +469,8 @@ private fun ComposeForm(vm: ComposeViewModel, phase: SendPhase, busy: Boolean, p
                     RecipientRow(
                         label = stringResource(R.string.compose_label_cc),
                         field = vm.cc,
+                        suggestions = vm.suggestions(vm.cc),
+                        onPick = { vm.pick(vm.cc, it) },
                         enabled = enabled,
                         tag = "compose_cc",
                         focusRequester = ccFocus,
@@ -347,6 +483,8 @@ private fun ComposeForm(vm: ComposeViewModel, phase: SendPhase, busy: Boolean, p
                     RecipientRow(
                         label = stringResource(R.string.compose_label_bcc),
                         field = vm.bcc,
+                        suggestions = vm.suggestions(vm.bcc),
+                        onPick = { vm.pick(vm.bcc, it) },
                         enabled = enabled,
                         tag = "compose_bcc",
                         note = stringResource(R.string.compose_bcc_note),
@@ -357,6 +495,11 @@ private fun ComposeForm(vm: ComposeViewModel, phase: SendPhase, busy: Boolean, p
             }
             FieldDivider()
             LabeledField(stringResource(R.string.compose_label_subject), vm.subject, enabled, "compose_subject")
+            val attachments by vm.attachments.collectAsStateWithLifecycle()
+            if (attachments.isNotEmpty()) {
+                FieldDivider()
+                AttachmentChips(attachments, enabled, vm::removeAttachment)
+            }
             FieldDivider()
             LabeledField(
                 label = stringResource(R.string.compose_label_body),
@@ -386,8 +529,7 @@ private fun StatusRow(text: String) {
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 private fun revealTransitions(): Pair<EnterTransition, ExitTransition> {
-    val resolver = LocalContext.current.contentResolver
-    val animate = remember(resolver) { Settings.Global.getFloat(resolver, Settings.Global.ANIMATOR_DURATION_SCALE, 1f) != 0f }
+    val animate = rememberAnimationsEnabled()
     val spatial = MaterialTheme.motionScheme.defaultSpatialSpec<IntSize>()
     val effects = MaterialTheme.motionScheme.defaultEffectsSpec<Float>()
     return if (animate) {
@@ -401,6 +543,7 @@ private fun revealTransitions(): Pair<EnterTransition, ExitTransition> {
 private fun ComposeDialogs(vm: ComposeViewModel, phase: SendPhase, onClose: () -> Unit, onChangeSender: () -> Unit) {
     when (vm.dialog) {
         ComposeDialog.EmptySubject -> AlertDialog(
+            shape = capsuleShape(),
             onDismissRequest = { vm.dialog = null },
             title = { Text(stringResource(R.string.compose_dialog_subject_title)) },
             text = { Text(stringResource(R.string.compose_dialog_subject_text)) },
@@ -417,6 +560,7 @@ private fun ComposeDialogs(vm: ComposeViewModel, phase: SendPhase, onClose: () -
             val unsure = !vm.senderConfirmed
             val failed = identity?.verification == SendVerification.FAILED
             AlertDialog(
+                shape = capsuleShape(),
                 onDismissRequest = { vm.dialog = null },
                 title = { Text(stringResource(R.string.compose_dialog_sender_title)) },
                 text = {
@@ -435,6 +579,7 @@ private fun ComposeDialogs(vm: ComposeViewModel, phase: SendPhase, onClose: () -
             )
         }
         ComposeDialog.Discard -> AlertDialog(
+            shape = capsuleShape(),
             onDismissRequest = { vm.dialog = null },
             title = { Text(stringResource(R.string.compose_dialog_discard_title)) },
             text = { Text(stringResource(R.string.compose_dialog_discard_text)) },
@@ -492,6 +637,7 @@ private fun OutcomeDialog(
     onDismiss: () -> Unit = {},
 ) {
     AlertDialog(
+        shape = capsuleShape(),
         onDismissRequest = {},
         title = { Text(stringResource(title)) },
         text = { Text(text) },

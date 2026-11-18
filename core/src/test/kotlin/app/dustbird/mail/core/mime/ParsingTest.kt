@@ -125,6 +125,81 @@ class ParsingTest {
         assertTrue(headers.contentType!!.startsWith("multipart/mixed"))
     }
 
+    private fun b64(text: String) = "=?UTF-8?B?" + Base64.getEncoder().encodeToString(text.toByteArray(Charsets.UTF_8)) + "?="
+
+    private fun fromOf(header: String) =
+        MessageParser.headers(MessageParser.parseRaw(mail(listOf("From: $header", "Subject: s"), "x".toByteArray())), emptyList()).from
+
+    @Test
+    fun anEncodedDisplayNameCanNeverReplaceTheRealSenderAddress() {
+        val comma = fromOf(b64("Kim, Haneul (영업)") + " <real@example.com>").single()
+        assertEquals("real@example.com", comma.address)
+        assertEquals("Kim, Haneul (영업)", comma.name)
+
+        val spoof = fromOf(b64("Bank Security <security@bank.example>, x") + " <attacker@evil.example>").single()
+        assertEquals("attacker@evil.example", spoof.address)
+        assertNull(spoof.name)
+
+        val bare = fromOf(b64("ceo@bank.example, x") + " <attacker@evil.example>").single()
+        assertEquals("attacker@evil.example", bare.address)
+        assertNull(bare.name)
+
+        val colon = fromOf(b64("공지: 한빛은행") + " <notice@example.com>").single()
+        assertEquals("notice@example.com", colon.address)
+        assertEquals("공지: 한빛은행", colon.name)
+
+        val own = fromOf(b64("real@example.com") + " <real@example.com>").single()
+        assertEquals("real@example.com", own.name)
+    }
+
+    @Test
+    fun rawEightBitAndQuotedDisplayNamesStillDecode() {
+        val rawUtf8 = String("날것이름".toByteArray(Charsets.UTF_8), Charsets.ISO_8859_1)
+        assertEquals("날것이름", fromOf("$rawUtf8 <a@example.com>").single().name)
+        assertEquals("Hong, Gildong", fromOf("\"Hong, Gildong\" <a@example.com>").single().name)
+        assertEquals("홍길동", fromOf("\"" + b64("홍길동") + "\" <a@example.com>").single().name)
+    }
+
+    @Test
+    fun encodedWordsGluedToOtherTextAreDecoded() {
+        val raw = mail(listOf("From: a@example.com", "Subject: Re:" + b64("한글 제목")), "x".toByteArray())
+        assertEquals("Re:한글 제목", MessageParser.headers(MessageParser.parseRaw(raw), emptyList()).subject)
+    }
+
+    @Test
+    fun windows1252PunctuationIsNotMistakenForKorean() {
+        val english = "I\u2019ll send it \u2013 don\u2019t worry. Cr\u00e9\u00e9e."
+        assertEquals(english, text(textMail("windows-1252", english.toByteArray(charset("windows-1252"))))?.trim())
+        assertEquals(korean, text(textMail("iso-8859-1", korean.toByteArray(eucKr)))?.trim())
+    }
+
+    @Test
+    fun htmlOnlyBodiesKeepTheirParagraphsWhenTurnedIntoText() {
+        val html = "<html><head><title>t</title><style>p{color:red}</style></head><body><div>첫 문단</div><p>둘째 문단<br>같은 문단 다음 줄</p>" +
+            "<ul><li>하나</li><li>둘</li></ul><table><tr><td>칸1</td><td>칸2</td></tr></table></body></html>"
+        assertEquals(
+            "첫 문단\n둘째 문단\n같은 문단 다음 줄\n하나\n둘\n칸1칸2",
+            MessageParser.plainText(ParsedContent(null, html, emptyList())),
+        )
+    }
+
+    @Test
+    fun namelessPartsThatAreNotBodyTextAreKeptAsAttachments() {
+        val raw = multipart(
+            "multipart/mixed", "b9",
+            "Content-Type: text/plain; charset=UTF-8\r\n\r\n본문",
+            "Content-Type: image/png\r\nContent-ID: <chart@example.com>\r\nContent-Transfer-Encoding: base64\r\n\r\niVBORw0KGgo=",
+            "Content-Type: text/calendar; method=REQUEST; charset=UTF-8\r\n\r\nBEGIN:VCALENDAR\r\nEND:VCALENDAR",
+            "Content-Type: message/rfc822\r\n\r\nSubject: inner\r\n\r\ninner body",
+            "Content-Type: text/x-amp-html; charset=UTF-8\r\n\r\n<html amp4email></html>",
+        )
+        val content = MessageParser.content(MessageParser.parseRaw(raw))
+        assertEquals("본문", content.text)
+        assertEquals(listOf("image.png", "invite.ics", "message.eml"), content.attachments.map { it.fileName })
+        assertEquals("text/calendar", MessageParser.attachmentPart(MessageParser.parseRaw(raw), 1)?.contentType?.substringBefore(';'))
+        assertEquals(9, content.attachments.first().size)
+    }
+
     @Test
     fun missingOrBrokenHeadersDoNotThrow() {
         val headers = MessageParser.headers(MessageParser.parseRaw("Subject: x\r\nDate: not a date\r\n\r\nbody".toByteArray()), emptyList())

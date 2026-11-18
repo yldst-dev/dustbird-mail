@@ -9,6 +9,8 @@ import androidx.compose.ui.test.performClick
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import app.dustbird.mail.R
 import app.dustbird.mail.core.send.SendState
+import app.dustbird.mail.data.repo.DraftContent
+import app.dustbird.mail.core.model.EmailAddress
 import app.dustbird.mail.ui.LocalAppContainer
 import app.dustbird.mail.ui.mailbox.TestMailbox
 import app.dustbird.mail.ui.theme.DustbirdTheme
@@ -139,5 +141,51 @@ class OutboxScreenTest {
         }
         assertEquals(R.string.outbox_detail_save_error, outboxPresentation(SendState.SAVE_FAILED, null).detail)
         assertEquals(R.string.outbox_detail_queued_retry, outboxPresentation(SendState.QUEUED, "NETWORK").detail)
+    }
+
+    @Test
+    fun scheduledMailShowsItsTimeAndOffersSendNowAndCancel() {
+        val scheduled = outboxPresentation(SendState.QUEUED, null, heldUntil = "Nov 18, 9:00 AM")
+        assertEquals(R.string.outbox_status_scheduled, scheduled.status)
+        assertEquals("Nov 18, 9:00 AM", scheduled.detailArg)
+        assertEquals(listOf(OutboxAction.SEND_NOW, OutboxAction.CANCEL_HOLD), scheduled.actions)
+        assertEquals(emptyList(), outboxPresentation(SendState.QUEUED, null).actions)
+    }
+
+    @Test
+    fun trackerShowsACountdownOnlyWhileTheMailCanStillBeCancelled() {
+        val base = runBlocking {
+            val account = mailbox.account("solo", "Solo")
+            val identity = mailbox.identity(account, "me@example.test", "Main")
+            mailbox.db.outbox().get(mailbox.outbox(account, identity, SendState.QUEUED, null))!!
+        }
+        val held = base.copy(sendAfter = 10_000, draftId = 7)
+        assertEquals(TrackedPhase.WAITING, trackedPhase(held, now = 9_000))
+        assertEquals(TrackedPhase.SENDING, trackedPhase(held, now = 10_000))
+        assertEquals(TrackedPhase.SENDING, trackedPhase(held.copy(draftId = null), now = 9_000))
+        assertEquals(TrackedPhase.SENT, trackedPhase(base.copy(state = SendState.SAVED), now = 0))
+        assertEquals(TrackedPhase.COPY_FAILED, trackedPhase(base.copy(state = SendState.SAVE_FAILED), now = 0))
+        assertEquals(TrackedPhase.FAILED, trackedPhase(base.copy(state = SendState.FAILED), now = 0))
+    }
+
+    @Test
+    fun savedDraftsAreListedAndOpenForEditing() {
+        val draftId = runBlocking {
+            val account = mailbox.account("solo", "Solo")
+            val identity = mailbox.identity(account, "me@example.test", "Main")
+            mailbox.container.drafts.save(
+                DraftContent(null, identity, listOf(EmailAddress("friend@example.test", "Friend")), emptyList(), emptyList(), "Unfinished subject", "Half a thought", null, emptyList()),
+            )
+        }
+        var opened = -1L
+        compose.setContent {
+            DustbirdTheme {
+                CompositionLocalProvider(LocalAppContainer provides mailbox.container) { DraftsRoute(onBack = {}, onOpen = { opened = it }) }
+            }
+        }
+        compose.waitUntil(10_000) { compose.onAllNodesWithText("Unfinished subject", useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithText("Friend", useUnmergedTree = true).assertExists()
+        compose.onNodeWithText("Unfinished subject", useUnmergedTree = true).performClick()
+        assertEquals(draftId, opened)
     }
 }

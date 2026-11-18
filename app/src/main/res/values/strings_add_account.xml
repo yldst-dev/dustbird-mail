@@ -76,6 +76,19 @@
     <string name="add_account_form_note">다음 단계에서 받는 서버와 보내는 서버에 차례로 로그인해 봅니다. 확인용 메일은 보내지 않습니다.</string>
     <string name="add_account_form_verify">로그인 확인하기</string>
 
+    <string name="add_account_assist_title">문장으로 입력하기</string>
+    <string name="add_account_assist_hint">아는 내용을 적으면 에이전트가 아래 칸을 채웁니다.</string>
+    <string name="add_account_assist_off">에이전트 설정에서 연결하면 쓸 수 있습니다.</string>
+    <string name="add_account_assist_done">채운 칸: %1$s. 값이 맞는지 확인하고 비밀번호는 직접 입력해 주세요.</string>
+    <string name="add_account_assist_body">아는 내용을 편하게 적어 주세요. 에이전트가 읽고 계정 정보 칸을 채웁니다. 계정은 채운 값을 확인한 뒤 직접 추가합니다.</string>
+    <string name="add_account_assist_placeholder">예: 주소는 user@example.com, 계정 이름은 개인, 보내는 사람 이름은 홍길동</string>
+    <string name="add_account_assist_placeholder_custom">예: 회사 메일 user@example.com, 받는 서버 imap.example.com 993, 보내는 서버 smtp.example.com 587 STARTTLS</string>
+    <string name="add_account_assist_privacy">비밀번호는 여기에 적지 마세요. 적은 글은 에이전트 설정에서 연결한 모델로 전송됩니다.</string>
+    <string name="add_account_assist_run">칸 채우기</string>
+    <string name="add_account_assist_running">글을 읽고 있습니다.</string>
+    <string name="add_account_assist_empty">채울 내용을 찾지 못했습니다. 메일 주소나 서버 주소를 넣어서 다시 적어 주세요.</string>
+    <string name="add_account_assist_settings">에이전트 설정 열기</string>
+
     <string name="add_account_error_address">메일 주소를 확인해 주세요. 예: user@example.com</string>
     <string name="add_account_error_required">비워 둘 수 없습니다.</string>
     <string name="add_account_error_host">서버 주소는 imap.example.com처럼 공백이나 http:// 없이 입력해 주세요.</string>

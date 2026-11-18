@@ -51,7 +51,8 @@ class HtmlSanitizerTest {
         assertFalse(result.body.contains("insecure.example"))
         assertFalse(result.body.contains("<img"))
         assertTrue(result.body.contains("logo"))
-        assertEquals(2, result.blockedRemoteImages)
+        assertEquals(1, result.blockedRemoteImages)
+        assertEquals(1, result.unshownImages)
     }
 
     @Test
@@ -61,7 +62,8 @@ class HtmlSanitizerTest {
         assertFalse(result.body.contains("no.example"))
         assertFalse(result.body.contains("data:image"))
         assertFalse(result.body.contains("cid:"))
-        assertEquals(3, result.blockedRemoteImages)
+        assertEquals(0, result.blockedRemoteImages)
+        assertEquals(3, result.unshownImages)
     }
 
     @Test
@@ -74,6 +76,26 @@ class HtmlSanitizerTest {
         assertTrue(out.contains("width: 100px"))
         assertTrue(out.contains("font-size: 14px"))
         listOf("url(", "position", "expression", "behavior", "evil").forEach { assertFalse(out.contains(it, true), it) }
+    }
+
+    @Test
+    fun colouredButtonsKeepTheirBackgroundAndHiddenTextStaysHidden() {
+        val out = clean(
+            "<a href=\"https://example.com/verify\" style=\"background:#03c75a;color:#fff;display:inline-block;border-radius:4px\">인증하기</a>" +
+                "<div style=\"display:none\">미리보기 문구</div>",
+        ).body
+        listOf("background: #03c75a", "color: #fff", "display: inline-block", "border-radius: 4px", "display: none").forEach { assertTrue(out.contains(it), it) }
+    }
+
+    @Test
+    fun contentWrappedInAFormIsKeptWhileItsControlsAreRemoved() {
+        val out = clean(
+            "<form action=\"https://evil.example/post\"><p>결재 요청이 도착했습니다.</p><input name=\"pw\"><select><option>a</option></select>" +
+                "<button type=\"submit\">확인</button></form>",
+        ).body
+        assertTrue(out.contains("결재 요청이 도착했습니다."))
+        assertTrue(out.contains("확인"))
+        listOf("<form", "<input", "<button", "<select", "evil.example").forEach { assertFalse(out.contains(it, true), it) }
     }
 
     @Test

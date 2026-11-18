@@ -66,6 +66,16 @@ class ComposeScreenTest {
     }
 
     @Test
+    fun theSendButtonOffersScheduledSending() {
+        rule.onNodeWithTag("compose_schedule").performClick()
+        rule.onNodeWithText(fixture.context.getString(R.string.compose_schedule_tomorrow_morning)).assertIsDisplayed()
+        rule.onNodeWithText(fixture.context.getString(R.string.compose_schedule_pick)).performClick()
+        rule.onNodeWithText(fixture.context.getString(R.string.compose_schedule_next)).assertIsDisplayed()
+        assertFalse(closed)
+        assertEquals(0, runBlocking { fixture.db.outbox().observeAll().first().size })
+    }
+
+    @Test
     fun anInvalidChipShowsItsErrorText() {
         val message = fixture.context.getString(R.string.compose_error_invalid_field)
         rule.onNodeWithTag("compose_to").performTextInput("broken,")
