@@ -52,9 +52,11 @@ private class Content(
     val unread: Map<Long, Int>,
 )
 
+private enum class Refresh { IDLE, QUIET, PULLED }
+
 private class Status(
     val sync: Map<Long, AccountSyncState>,
-    val refreshing: Boolean,
+    val refreshing: Refresh,
     val loadingOlder: Boolean,
     val exhausted: Set<FolderKey>,
     val limit: Int,
@@ -64,7 +66,7 @@ private class Status(
 class MailboxViewModel(private val container: AppContainer) : ViewModel() {
     private val scope = MutableStateFlow<MailboxScope>(MailboxScope.Unified)
     private val limit = MutableStateFlow(PAGE_SIZE)
-    private val refreshing = MutableStateFlow(false)
+    private val refreshing = MutableStateFlow(Refresh.IDLE)
     private val loadingOlder = MutableStateFlow(false)
     private val exhausted = MutableStateFlow<Set<FolderKey>>(emptySet())
     private val selectedId = MutableStateFlow<Long?>(null)
@@ -108,8 +110,8 @@ class MailboxViewModel(private val container: AppContainer) : ViewModel() {
             messages = content.messages,
             unread = content.unread,
             problems = problemsOf(scopeAccounts, status.sync),
-            busy = status.refreshing || scopeAccounts.any { status.sync[it.id] == AccountSyncState.Syncing },
-            refreshing = status.refreshing,
+            busy = status.refreshing != Refresh.IDLE || scopeAccounts.any { status.sync[it.id] == AccountSyncState.Syncing },
+            refreshing = status.refreshing == Refresh.PULLED,
             loadingOlder = status.loadingOlder,
             hasMore = content.messages != null && (content.messages.size >= status.limit || targets.any { it !in status.exhausted }),
             outboxPending = pending,
@@ -127,7 +129,7 @@ class MailboxViewModel(private val container: AppContainer) : ViewModel() {
     }
 
     init {
-        refresh()
+        start(Refresh.QUIET)
         viewModelScope.launch {
             container.actions.started.collect { started ->
                 val ticket = started.ticket
@@ -224,11 +226,16 @@ class MailboxViewModel(private val container: AppContainer) : ViewModel() {
         limit.value = PAGE_SIZE
         selectedId.value = null
         selection.value = emptySet()
-        if (target is MailboxScope.Folder && !refresh()) container.scope.launch { container.sync.syncFolder(target.folderId) }
+        if (target is MailboxScope.Folder && !start(Refresh.QUIET)) container.scope.launch { container.sync.syncFolder(target.folderId) }
     }
 
-    fun refresh(): Boolean {
-        if (!refreshing.compareAndSet(false, true)) return false
+    fun refresh(): Boolean = start(Refresh.PULLED)
+
+    private fun start(mode: Refresh): Boolean {
+        if (!refreshing.compareAndSet(Refresh.IDLE, mode)) {
+            if (mode == Refresh.PULLED) refreshing.compareAndSet(Refresh.QUIET, Refresh.PULLED)
+            return false
+        }
         val target = scope.value
         container.scope.launch {
             try {
@@ -242,7 +249,7 @@ class MailboxViewModel(private val container: AppContainer) : ViewModel() {
             } catch (_: Exception) {
             } finally {
                 exhausted.value = emptySet()
-                refreshing.value = false
+                refreshing.value = Refresh.IDLE
                 container.digests.refresh()
             }
         }

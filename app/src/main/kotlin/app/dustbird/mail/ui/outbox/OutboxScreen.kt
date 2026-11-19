@@ -59,7 +59,6 @@ import app.dustbird.mail.ui.mailbox.rememberMessageTimeFormatter
 import app.dustbird.mail.ui.theme.FlatCard
 import app.dustbird.mail.ui.theme.CapsuleGap
 import app.dustbird.mail.ui.theme.FlatSnackbarHost
-import app.dustbird.mail.ui.theme.capsuleShape
 import app.dustbird.mail.ui.theme.groupedTopAppBarColors
 import java.time.Instant
 
@@ -158,7 +157,6 @@ fun OutboxRoute(onBack: () -> Unit, onEditDraft: (Long) -> Unit = {}) {
     confirmation?.let { pending ->
         val resend = pending.action == OutboxAction.RESEND
         AlertDialog(
-            shape = capsuleShape(),
             onDismissRequest = { confirmation = null },
             title = { Text(stringResource(if (resend) R.string.outbox_confirm_resend_title else R.string.outbox_confirm_discard_title)) },
             text = {

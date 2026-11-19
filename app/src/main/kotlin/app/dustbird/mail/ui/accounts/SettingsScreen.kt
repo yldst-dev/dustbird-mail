@@ -4,11 +4,8 @@ import app.dustbird.mail.ui.theme.rememberHaptics
 import android.Manifest
 import android.app.Activity
 import android.content.Context
-import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
-import android.os.PowerManager
-import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
@@ -49,13 +46,14 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.toggleableState
 import androidx.compose.ui.state.ToggleableState
 import androidx.compose.ui.unit.dp
-import androidx.core.app.NotificationManagerCompat
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import app.dustbird.mail.AppContainer
 import app.dustbird.mail.R
+import app.dustbird.mail.ui.BatteryExemption
+import app.dustbird.mail.ui.NotificationAccess
 import app.dustbird.mail.core.model.SyncMode
 import app.dustbird.mail.ui.appViewModel
 import app.dustbird.mail.ui.theme.FlatCard
@@ -66,7 +64,6 @@ import app.dustbird.mail.ui.theme.CapsuleGap
 import app.dustbird.mail.ui.theme.CapsulePadding
 import app.dustbird.mail.ui.theme.GroupTitle
 import app.dustbird.mail.ui.theme.cardItemShapes
-import app.dustbird.mail.ui.theme.capsuleShape
 import app.dustbird.mail.ui.theme.groupedTopAppBarColors
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.stateIn
@@ -102,15 +99,15 @@ fun SettingsRoute(onBack: () -> Unit, onOpenLicenses: () -> Unit) {
     val hideLockScreen by viewModel.hideLockScreen.collectAsStateWithLifecycle()
     val accounts by viewModel.accounts.collectAsStateWithLifecycle()
     val sendDelay by viewModel.sendDelay.collectAsStateWithLifecycle()
-    var notificationsOn by remember { mutableStateOf(NotificationManagerCompat.from(context).areNotificationsEnabled()) }
-    var batteryExempt by remember { mutableStateOf(isBatteryExempt(context)) }
+    var notificationsOn by remember { mutableStateOf(NotificationAccess.enabled(context)) }
+    var batteryExempt by remember { mutableStateOf(BatteryExemption.granted(context)) }
     var confirmReset by remember { mutableStateOf(false) }
     val permission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {
-        notificationsOn = NotificationManagerCompat.from(context).areNotificationsEnabled()
+        notificationsOn = NotificationAccess.enabled(context)
     }
     LifecycleResumeEffect(Unit) {
-        notificationsOn = NotificationManagerCompat.from(context).areNotificationsEnabled()
-        batteryExempt = isBatteryExempt(context)
+        notificationsOn = NotificationAccess.enabled(context)
+        batteryExempt = BatteryExemption.granted(context)
         onPauseOrDispose { }
     }
     Scaffold(
@@ -145,7 +142,7 @@ fun SettingsRoute(onBack: () -> Unit, onOpenLicenses: () -> Unit) {
                             Text(stringResource(R.string.settings_notifications_allow))
                         }
                     }
-                    OutlinedButton(onClick = { openNotificationSettings(context) }) {
+                    OutlinedButton(onClick = { NotificationAccess.openSettings(context) }) {
                         Text(stringResource(R.string.settings_notifications_open))
                     }
                 }
@@ -222,7 +219,7 @@ fun SettingsRoute(onBack: () -> Unit, onOpenLicenses: () -> Unit) {
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
-                    OutlinedButton(onClick = { openBatterySettings(context) }) {
+                    OutlinedButton(onClick = { BatteryExemption.openSettings(context) }) {
                         Text(stringResource(R.string.settings_battery_open))
                     }
                 }
@@ -257,7 +254,6 @@ fun SettingsRoute(onBack: () -> Unit, onOpenLicenses: () -> Unit) {
     }
     if (confirmReset) {
         AlertDialog(
-            shape = capsuleShape(),
             onDismissRequest = { confirmReset = false },
             title = { Text(stringResource(R.string.settings_reset_title)) },
             text = { Text(stringResource(R.string.settings_reset_text)) },
@@ -271,17 +267,6 @@ fun SettingsRoute(onBack: () -> Unit, onOpenLicenses: () -> Unit) {
         )
     }
 }
-
-private fun openNotificationSettings(context: Context) {
-    context.startActivity(Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName))
-}
-
-private fun openBatterySettings(context: Context) {
-    context.startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))
-}
-
-private fun isBatteryExempt(context: Context): Boolean =
-    context.getSystemService(PowerManager::class.java).isIgnoringBatteryOptimizations(context.packageName)
 
 private fun versionName(context: Context): String =
     context.packageManager.getPackageInfo(context.packageName, 0).versionName.orEmpty()

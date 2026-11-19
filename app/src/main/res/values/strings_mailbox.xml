@@ -28,7 +28,6 @@
     <string name="mailbox_row_no_sender">(보낸 사람 없음)</string>
     <string name="mailbox_row_no_subject">(제목 없음)</string>
     <string name="mailbox_row_received_at">받은 주소</string>
-    <string name="mailbox_row_unknown_identity">미확인</string>
 
     <string name="mailbox_time_today">a h:mm</string>
     <string name="mailbox_date_this_year">M월 d일</string>

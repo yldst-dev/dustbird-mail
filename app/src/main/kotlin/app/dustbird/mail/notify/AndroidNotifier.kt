@@ -36,7 +36,6 @@ class AndroidNotifier(
             .setContentText(context.getString(R.string.notify_public_text, accountName))
             .build()
         mails.forEach { mail ->
-            val identity = mail.identityLabel ?: context.getString(R.string.notify_unknown_identity)
             val title = mail.sender.ifBlank { context.getString(R.string.notify_unknown_sender) }
             val subject = mail.subject.ifBlank { context.getString(R.string.notify_no_subject) }
             val notification = NotificationCompat.Builder(context, channelId(account.id))
@@ -44,7 +43,7 @@ class AndroidNotifier(
                 .setContentTitle(title)
                 .setContentText(subject)
                 .setStyle(NotificationCompat.BigTextStyle().bigText(listOf(subject, mail.preview).filter { it.isNotBlank() }.joinToString("\n")))
-                .setSubText(context.getString(R.string.notify_subtext, accountName, identity))
+                .setSubText(mail.identityLabel?.let { context.getString(R.string.notify_subtext, accountName, it) } ?: accountName)
                 .setContentIntent(openMessage(mail.messageRowId))
                 .addAction(0, context.getString(R.string.notify_action_read), action(MailActionReceiver.ACTION_READ, account.id, mail.messageRowId, 0))
                 .addAction(0, context.getString(R.string.notify_action_archive), action(MailActionReceiver.ACTION_ARCHIVE, account.id, mail.messageRowId, 1))

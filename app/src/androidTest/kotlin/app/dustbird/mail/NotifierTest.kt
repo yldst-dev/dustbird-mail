@@ -67,7 +67,7 @@ class NotifierTest {
         assertEquals(listOf("읽음", "보관", "삭제"), first.actions.map { it.title.toString() })
         assertTrue(first.extras.getCharSequence("android.subText").toString().contains("업무"))
         assertTrue(first.extras.getCharSequence("android.subText").toString().contains("biz"))
-        assertTrue(active.first { it.id == 12 }.notification.extras.getCharSequence("android.subText").toString().contains("미확인"))
+        assertEquals("업무", active.first { it.id == 12 }.notification.extras.getCharSequence("android.subText").toString())
         assertTrue(active.any { it.notification.flags and android.app.Notification.FLAG_GROUP_SUMMARY != 0 })
         assertNotNull(manager.getNotificationChannel("mail_account_${account.id}"))
     }

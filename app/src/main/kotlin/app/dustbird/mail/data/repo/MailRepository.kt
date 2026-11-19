@@ -21,6 +21,7 @@ import app.dustbird.mail.data.db.MailDatabase
 import app.dustbird.mail.data.db.MessageBodyEntity
 import app.dustbird.mail.data.db.MessageEntity
 import app.dustbird.mail.data.db.PendingFlagEntity
+import app.dustbird.mail.data.db.SentFrom
 import app.dustbird.mail.data.toModel
 import app.dustbird.mail.sync.ImapAccess
 import app.dustbird.mail.sync.MissingCredentialException
@@ -410,18 +411,24 @@ class MailRepository(
         ownAddress,
     )
 
-    private inner class Addressing(identities: List<MailIdentity>, accounts: List<MailAccount>, folders: List<FolderEntity>) {
+    private inner class Addressing(identities: List<MailIdentity>, accounts: List<MailAccount>, folders: List<FolderEntity>, sentFrom: List<SentFrom>) {
         private val byAccount = identities.groupBy { it.accountId }
-        private val own = accounts.associate { account -> account.id to RecipientMatcher.ownAddresses(account.providerId, account.username, byAccount[account.id].orEmpty()) }
+        private val sent = sentFrom.groupBy({ it.accountId }, { it.address })
+        private val own = accounts.associate { account ->
+            account.id to RecipientMatcher.ownAddresses(account.providerId, account.username, byAccount[account.id].orEmpty(), sent[account.id].orEmpty())
+        }
         private val outgoing = folders.filter { it.role == FolderRole.SENT || it.role == FolderRole.DRAFTS }.map { it.id }.toSet()
 
         fun match(message: MessageEntity): RecipientMatch =
             if (message.folderId in outgoing) RecipientMatch.NotReceived else match(message, byAccount[message.accountId].orEmpty(), own[message.accountId] ?: { false })
     }
 
-    private val addressing: Flow<Addressing> = combine(accounts.identities, accounts.accounts, db.folders().observeAll()) { identities, list, folders ->
-        Addressing(identities, list, folders)
-    }
+    private val addressing: Flow<Addressing> = combine(
+        accounts.identities,
+        accounts.accounts,
+        db.folders().observeAll(),
+        db.messages().observeSentFrom().distinctUntilChanged(),
+    ) { identities, list, folders, sentFrom -> Addressing(identities, list, folders, sentFrom) }
 }
 
 private const val MAX_CACHED_BODY_CHARS = 600_000

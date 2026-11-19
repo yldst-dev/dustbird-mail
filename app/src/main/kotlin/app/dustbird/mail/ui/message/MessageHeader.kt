@@ -205,19 +205,16 @@ private fun SenderAvatar(sender: String?) {
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun Delivery(state: HeaderState.Found) {
-    val typography = MaterialTheme.typography
-    val muted = MaterialTheme.colorScheme.onSurfaceVariant
+    val account = state.account?.takeIf { state.showAccount }
+    val received = state.receivedIdentities.joinToString(", ") { it.label }.ifEmpty { state.receivedAddress }
+    if (account == null && received == null) return
     FlowRow(
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalArrangement = Arrangement.spacedBy(4.dp),
         itemVerticalAlignment = Alignment.CenterVertically,
     ) {
-        if (state.showAccount && state.account != null) AccountLabel(state.account.label, state.accountIndex, Modifier.testTag(MessageAccountTag))
-        if (state.receivedIdentities.isEmpty()) {
-            Text(stringResource(R.string.message_identity_unknown), style = typography.bodyMedium, color = muted)
-        } else {
-            IdentityLabel(stringResource(R.string.message_identity), state.receivedIdentities.joinToString(", ") { it.label })
-        }
+        if (account != null) AccountLabel(account.label, state.accountIndex, Modifier.testTag(MessageAccountTag))
+        if (received != null) IdentityLabel(stringResource(R.string.message_identity), received)
     }
 }
 
@@ -244,11 +241,11 @@ private fun Details(state: HeaderState.Found) {
                 }
             }
         }
-        if (state.receivedIdentities.isEmpty()) {
-            Text(stringResource(R.string.message_identity_unknown), style = typography.bodyMedium)
-        } else {
+        if (state.receivedIdentities.isNotEmpty()) {
             val lines = state.receivedIdentities.map { stringResource(R.string.message_identity_value, it.label, it.address) }
             DetailRow(R.string.message_identity) { DetailText(lines.joinToString("\n")) }
+        } else if (state.receivedAddress != null) {
+            DetailRow(R.string.message_identity) { DetailText(state.receivedAddress) }
         }
     }
 }

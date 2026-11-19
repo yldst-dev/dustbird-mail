@@ -67,11 +67,7 @@ fun MessageRow(
         ?: stringResource(R.string.mailbox_row_no_sender)
     val subject = message.subject.ifBlank { stringResource(R.string.mailbox_row_no_subject) }
     val matched = (message.match as? RecipientMatch.Matched)?.identityIds?.mapNotNull { identityLabels[it] }.orEmpty()
-    val identityText = when (val match = message.match) {
-        is RecipientMatch.Unknown -> stringResource(R.string.mailbox_row_unknown_identity)
-        is RecipientMatch.OwnAddress -> match.address
-        else -> matched.joinToString(", ").ifEmpty { null }
-    }
+    val identityText = (message.match as? RecipientMatch.OwnAddress)?.address ?: matched.joinToString(", ").ifEmpty { null }
     val scheme = MaterialTheme.colorScheme
     val typography = MaterialTheme.typography
     val attachmentDescription = stringResource(R.string.mailbox_row_attachment_description)

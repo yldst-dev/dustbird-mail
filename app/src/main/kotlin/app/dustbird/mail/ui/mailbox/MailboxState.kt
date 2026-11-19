@@ -67,7 +67,7 @@ fun MailboxUiState.body(online: Boolean): MailboxBody {
         rows == null -> MailboxBody.LOADING
         rows.isNotEmpty() -> MailboxBody.MESSAGES
         accounts.isEmpty() -> MailboxBody.NO_ACCOUNTS
-        busy -> MailboxBody.LOADING
+        busy && !refreshing -> MailboxBody.LOADING
         filter != MessageFilter.ALL -> MailboxBody.EMPTY
         !online -> MailboxBody.OFFLINE
         problems.size == scopeAccounts.size && problems.isNotEmpty() -> MailboxBody.FAILED

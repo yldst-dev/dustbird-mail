@@ -75,7 +75,6 @@ import app.dustbird.mail.ui.theme.CapsulePadding
 import app.dustbird.mail.ui.theme.GroupTitle
 import app.dustbird.mail.ui.theme.Pill
 import app.dustbird.mail.ui.theme.cardItemShapes
-import app.dustbird.mail.ui.theme.capsuleShape
 import app.dustbird.mail.ui.theme.groupedTopAppBarColors
 import app.dustbird.mail.ui.theme.pillFieldColors
 import app.dustbird.mail.ui.theme.hiddenSecret
@@ -425,7 +424,6 @@ private fun AutomationDialog(automation: AgentAutomationEntity, onSave: (AgentAu
     val parsedHour = hour.toIntOrNull()?.takeIf { it in 0..23 }
     val valid = name.isNotBlank() && instruction.isNotBlank() && (trigger != AgentService.TRIGGER_DAILY || parsedHour != null)
     AlertDialog(
-        shape = capsuleShape(),
         onDismissRequest = onDismiss,
         title = { Text(stringResource(R.string.agent_automation_edit)) },
         text = {

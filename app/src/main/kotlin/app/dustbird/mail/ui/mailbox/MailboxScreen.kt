@@ -10,7 +10,10 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
@@ -85,16 +88,17 @@ import app.dustbird.mail.data.repo.MailboxScope
 import app.dustbird.mail.data.repo.MoveTarget
 import app.dustbird.mail.ui.appViewModel
 import app.dustbird.mail.ui.message.MessagePane
+import app.dustbird.mail.ui.message.MessageRoute
 import app.dustbird.mail.ui.nav.ComposeArgs
 import app.dustbird.mail.ui.theme.CapsulePadding
 import app.dustbird.mail.ui.theme.FlatMenu
 import app.dustbird.mail.ui.theme.FlatSnackbarHost
 import app.dustbird.mail.ui.theme.Pill
 import app.dustbird.mail.ui.theme.capsuleItemShapes
-import app.dustbird.mail.ui.theme.capsuleShape
 import app.dustbird.mail.ui.theme.flatFabElevation
 import app.dustbird.mail.ui.theme.groupedTopAppBarColors
 import app.dustbird.mail.ui.theme.MenuEntry
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
@@ -114,7 +118,14 @@ fun MailboxRoute(
     val online by rememberOnline()
     val state = loaded
     if (state == null) {
-        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { LoadingIndicator() }
+        var slow by remember { mutableStateOf(false) }
+        LaunchedEffect(Unit) {
+            delay(SLOW_START_MS)
+            slow = true
+        }
+        Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surfaceContainer), contentAlignment = Alignment.Center) {
+            if (slow) LoadingIndicator()
+        }
     } else {
         MailboxScreen(state, online, viewModel, onOpenMessage, onCompose, onOpenAccounts, onOpenSettings, onOpenOutbox, onOpenSearch, onOpenAgent, onOpenDrafts)
     }
@@ -137,8 +148,10 @@ private fun MailboxScreen(
 ) {
     val adaptive = currentWindowAdaptiveInfoV2()
     val directive = calculatePaneScaffoldDirectiveWithTwoPanesOnMediumWidth(adaptive)
-    val twoPane = directive.maxHorizontalPartitions > 1
     val permanentMenu = adaptive.windowSizeClass.isWidthAtLeastBreakpoint(WindowSizeClass.WIDTH_DP_EXPANDED_LOWER_BOUND)
+    val roomForThree = adaptive.windowSizeClass.isWidthAtLeastBreakpoint(WindowSizeClass.WIDTH_DP_LARGE_LOWER_BOUND)
+    val twoPane = directive.maxHorizontalPartitions > 1 && (!permanentMenu || roomForThree)
+    val reading = state.selectedId.takeIf { permanentMenu && !twoPane }
     val drawerState = rememberDrawerState(DrawerValue.Closed)
     val coroutineScope = rememberCoroutineScope()
     val snackbar = remember { SnackbarHostState() }
@@ -182,6 +195,14 @@ private fun MailboxScreen(
     }
     BackHandler(enabled = selecting) { viewModel.clearSelection() }
     BackHandler(enabled = drawerState.isOpen) { coroutineScope.launch { drawerState.close() } }
+    BackHandler(enabled = reading != null) { viewModel.select(null) }
+    LaunchedEffect(permanentMenu, twoPane, state.selectedId) {
+        val open = state.selectedId
+        if (!permanentMenu && !twoPane && open != null) {
+            viewModel.select(null)
+            onOpenMessage(open)
+        }
+    }
 
     fun startMove(ids: Collection<Long>) {
         if (ids.isEmpty()) return
@@ -194,14 +215,14 @@ private fun MailboxScreen(
     }
 
     val inDrafts = state.scopeRole() == FolderRole.DRAFTS
-    val rowActions = remember(viewModel, twoPane, onOpenMessage, inDrafts) {
+    val rowActions = remember(viewModel, twoPane, permanentMenu, onOpenMessage, inDrafts) {
         MailboxRowActions(
             onOpen = { id ->
                 coroutineScope.launch {
                     val draftId = if (inDrafts) viewModel.draftFor(id) else null
                     when {
                         draftId != null -> onCompose(ComposeArgs(draftId = draftId))
-                        twoPane -> viewModel.select(id)
+                        twoPane || permanentMenu -> viewModel.select(id)
                         else -> onOpenMessage(id)
                     }
                 }
@@ -334,10 +355,27 @@ private fun MailboxScreen(
     }
 
     if (permanentMenu) {
-        PermanentNavigationDrawer(
-            drawerContent = { PermanentDrawerSheet(Modifier.width(280.dp)) { menu() } },
-            content = screen,
-        )
+        PermanentNavigationDrawer(drawerContent = { PermanentDrawerSheet(Modifier.width(280.dp)) { menu() } }) {
+            AnimatedContent(
+                targetState = reading,
+                transitionSpec = {
+                    val side = if (targetState != null) 1 else -1
+                    if (animations) {
+                        slideInHorizontally(motion.slowSpatialSpec()) { side * it / 4 } + fadeIn(motion.defaultEffectsSpec()) togetherWith
+                            slideOutHorizontally(motion.slowSpatialSpec()) { -side * it / 4 } + fadeOut(motion.defaultEffectsSpec())
+                    } else {
+                        EnterTransition.None togetherWith ExitTransition.None
+                    }
+                },
+                label = "mailbox reading",
+            ) { messageId ->
+                if (messageId == null) {
+                    screen()
+                } else {
+                    MessageRoute(messageId, onBack = { viewModel.select(null) }, onCompose = onCompose, onOpenAgent = onOpenAgent)
+                }
+            }
+        }
     } else {
         ModalNavigationDrawer(
             drawerContent = {
@@ -350,7 +388,6 @@ private fun MailboxScreen(
 
     if (confirmDelete != null) {
         AlertDialog(
-            shape = capsuleShape(),
             onDismissRequest = { viewModel.answerDeleteConfirm(false) },
             title = { Text(stringResource(R.string.mailbox_delete_forever_title)) },
             text = { Text(stringResource(R.string.mailbox_delete_forever_body)) },
@@ -379,7 +416,6 @@ private fun MailboxScreen(
 @Composable
 fun FolderPicker(folders: List<FolderEntity>, onPick: (FolderEntity) -> Unit, onDismiss: () -> Unit) {
     AlertDialog(
-        shape = capsuleShape(),
         onDismissRequest = onDismiss,
         title = { Text(stringResource(R.string.mailbox_move_title)) },
         text = {
@@ -555,3 +591,5 @@ private fun scopeTitle(state: MailboxUiState): String {
         }
     }
 }
+
+private const val SLOW_START_MS = 500L

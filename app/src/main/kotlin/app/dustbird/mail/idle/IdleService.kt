@@ -10,6 +10,7 @@ import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
+import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
 import androidx.core.content.ContextCompat
@@ -95,7 +96,9 @@ class IdleService : Service() {
                 val known = container.db.folders().byRole(accountId, FolderRole.INBOX)?.highestUid ?: 0
                 val session = withContext(Dispatchers.IO) { container.connector.connect(endpoint, credentials) }
                 try {
-                    if (!session.capabilities().contains("IDLE")) {
+                    val pushed = session.capabilities().contains("IDLE")
+                    Log.i(LOG_TAG, "Real-time for account $accountId: server IDLE support = $pushed")
+                    if (!pushed) {
                         delay(FALLBACK_POLL_MS)
                     } else {
                         backoff = INITIAL_BACKOFF_MS
@@ -148,6 +151,7 @@ class IdleService : Service() {
         const val INITIAL_BACKOFF_MS = 15_000L
         const val MAX_BACKOFF_MS = 600_000L
         const val FALLBACK_POLL_MS = 300_000L
+        const val LOG_TAG = "Dustbird"
     }
 }
 

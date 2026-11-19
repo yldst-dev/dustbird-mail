@@ -43,6 +43,7 @@ data class NewAccount(
     val identityDisplayName: String,
     val imap: ServerEndpoint,
     val smtp: ServerEndpoint,
+    val identityLabel: String = "",
 )
 
 data class IdentityInput(val address: String, val displayName: String, val signature: String, val label: String)
@@ -93,7 +94,7 @@ class AccountRepository(
         val existing = db.accounts().getAll().map { it.toModel() }
         if (AccountRules.isDuplicateMailbox(existing, new.imap.host, new.username)) return AddAccountResult.Rejected(Rejection.DUPLICATE_MAILBOX)
         val allIdentities = db.identities().getAll().map { it.toModel() }
-        val label = IdentityRules.defaultLabel(allIdentities, new.loginAddress)
+        val label = new.identityLabel.trim().ifEmpty { IdentityRules.defaultLabel(allIdentities, new.loginAddress) }
         IdentityRules.validate(allIdentities, IdentityDraft(0, new.loginAddress, label))?.let { return AddAccountResult.Rejected(it) }
         var firstIdentityId = 0L
         val accountId = db.withTransaction {
@@ -111,7 +112,7 @@ class AccountRepository(
                     smtpSecurity = new.smtp.security,
                     authMethod = Providers.byId(new.providerId).authMethods.first(),
                     sortOrder = db.accounts().nextSortOrder(),
-                    syncMode = SyncMode.PERIODIC,
+                    syncMode = if (new.providerId == Providers.ICLOUD.id) SyncMode.IDLE else SyncMode.PERIODIC,
                     notificationsEnabled = true,
                     needsReauth = false,
                     mailboxKey = AccountRules.mailboxKey(new.imap.host, new.username),

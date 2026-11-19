@@ -44,7 +44,6 @@ import app.dustbird.mail.core.send.SendState
 import app.dustbird.mail.data.repo.IdentityInput
 import app.dustbird.mail.data.repo.IdentityResult
 import app.dustbird.mail.ui.LocalAppContainer
-import app.dustbird.mail.ui.theme.capsuleShape
 import kotlinx.coroutines.launch
 
 private const val NEW_IDENTITY = 0L
@@ -251,8 +250,6 @@ private fun IdentityEditor(accountId: Long, editing: MailIdentity?, onDismiss: (
     var saving by remember { mutableStateOf(false) }
 
     AlertDialog(
-
-        shape = capsuleShape(),
         onDismissRequest = onDismiss,
         title = { Text(stringResource(if (editing == null) R.string.accounts_identity_add_title else R.string.accounts_identity_edit_title)) },
         text = {

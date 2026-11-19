@@ -6,6 +6,8 @@ import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.hapticfeedback.HapticFeedback
 import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.test.DeviceConfigurationOverride
+import androidx.compose.ui.test.ForcedSize
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
@@ -26,6 +28,10 @@ import androidx.compose.ui.test.swipeLeft
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import app.dustbird.mail.R
+import kotlin.test.assertTrue
+import app.dustbird.mail.ui.message.MessageSenderTag
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.DpSize
 import app.dustbird.mail.core.model.FolderRole
 import app.dustbird.mail.data.db.FolderEntity
 import app.dustbird.mail.data.db.ListState
@@ -235,7 +241,46 @@ class MailboxScreenTest {
     }
 
     @Test
-    fun unknownMatchShowsPlainUnknownTextAndMatchedShowsIdentityLabel() {
+    fun onAnUnfoldedScreenAMessageReplacesTheListBesideTheMenuAndBackReturnsToTheList() {
+        runBlocking {
+            val solo = mailbox.account("solo", "Solo")
+            mailbox.message(solo, mailbox.inbox(solo), uid = 1, subject = "Wide subject", to = "solo@example.test")
+        }
+        val routed = mutableListOf<Long>()
+        compose.setContent {
+            DustbirdTheme {
+                CompositionLocalProvider(LocalAppContainer provides mailbox.container) {
+                    DeviceConfigurationOverride(DeviceConfigurationOverride.ForcedSize(DpSize(1000.dp, 700.dp))) {
+                        MailboxRoute(onOpenMessage = { routed += it }, onCompose = {}, onOpenAccounts = {}, onOpenSettings = {}, onOpenOutbox = {})
+                    }
+                }
+            }
+        }
+        val composeLabel = mailbox.text(R.string.mailbox_compose)
+        val menuTitle = mailbox.text(R.string.app_name)
+        fun reading() = compose.onAllNodesWithTag(MessageSenderTag).fetchSemanticsNodes().isNotEmpty()
+        fun listShown() = compose.onAllNodesWithContentDescription(composeLabel).fetchSemanticsNodes().isNotEmpty()
+        waitForText("Wide subject")
+        compose.onNodeWithText(menuTitle).assertIsDisplayed()
+        compose.onAllNodesWithText(mailbox.text(R.string.mailbox_pick_message)).assertCountEquals(0)
+        assertTrue(listShown())
+
+        compose.onNodeWithText("Wide subject").performClick()
+        compose.waitUntil(5_000) { reading() && !listShown() }
+        compose.onNodeWithText(menuTitle).assertIsDisplayed()
+        assertTrue(routed.isEmpty())
+
+        compose.onNodeWithContentDescription(mailbox.text(R.string.message_back)).performClick()
+        compose.waitUntil(5_000) { !reading() && listShown() }
+        compose.onNodeWithText("Wide subject").performClick()
+        compose.waitUntil(5_000) { reading() }
+        InstrumentationRegistry.getInstrumentation().sendKeyDownUpSync(KeyEvent.KEYCODE_BACK)
+        compose.waitUntil(5_000) { !reading() }
+        compose.onNodeWithText("Wide subject").assertIsDisplayed()
+    }
+
+    @Test
+    fun unknownMatchShowsNoReceivedAddressAndMatchedShowsIdentityLabel() {
         runBlocking {
             val solo = mailbox.account("solo", "Solo")
             mailbox.identity(solo, "shop@example.test", "Shopping")
@@ -245,9 +290,8 @@ class MailboxScreenTest {
         }
         show()
         waitForText("Known recipient")
-        waitForText(mailbox.text(R.string.mailbox_row_unknown_identity))
         waitForText("Shopping")
-        compose.onAllNodesWithText(mailbox.text(R.string.mailbox_row_unknown_identity), useUnmergedTree = true).assertCountEquals(1)
+        compose.onAllNodesWithText(mailbox.text(R.string.mailbox_row_received_at), useUnmergedTree = true).assertCountEquals(1)
     }
 
     @Test

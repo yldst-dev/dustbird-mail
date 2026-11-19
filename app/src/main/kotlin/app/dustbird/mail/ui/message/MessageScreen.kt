@@ -6,12 +6,10 @@ import android.content.Intent
 import android.widget.Toast
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.calculateEndPadding
 import androidx.compose.foundation.layout.calculateStartPadding
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.ZeroCornerSize
@@ -32,8 +30,10 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.Dp
@@ -61,6 +61,8 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.AlertDialog
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.compose.rememberLauncherForActivityResult
+
+const val MessageScrollTag = "message_scroll"
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -181,8 +183,7 @@ private fun MessageContent(
         when (val state = header) {
             HeaderState.Loading -> CenteredLoading(modifier)
             HeaderState.Missing -> CenteredMessage(stringResource(R.string.message_missing), modifier)
-            is HeaderState.Found -> BoxWithConstraints(modifier.fillMaxSize()) {
-                val headerMax = maxOf(maxHeight * 0.45f, maxHeight - 200.dp)
+            is HeaderState.Found -> Box(modifier.fillMaxSize()) {
                 val actions = remember(viewModel) {
                     MessageActions(
                         onSetSeen = viewModel::setSeen,
@@ -196,27 +197,24 @@ private fun MessageContent(
                 }
                 val side = if (docked) 16.dp else 0.dp
                 val sheet = if (docked) MaterialTheme.shapes.extraExtraLarge.copy(bottomStart = ZeroCornerSize, bottomEnd = ZeroCornerSize) else capsuleShape()
-                Column(Modifier.fillMaxSize()) {
-                    Column(
-                        Modifier.heightIn(max = headerMax).verticalScroll(rememberScrollState()).padding(bottom = CapsuleGap),
-                        verticalArrangement = Arrangement.spacedBy(CapsuleGap),
-                    ) {
-                        MessageHeader(state, actions, side = side)
-                        (body as? BodyState.Ready)?.let { ready ->
-                            AttachmentSection(
-                                attachments = ready.attachments,
-                                modifier = Modifier.padding(horizontal = side),
-                                downloading = downloading,
-                                onOpen = viewModel::openAttachment,
-                                onSave = { index ->
-                                    saving = index
-                                    saver.launch(AttachmentFiles.safeName(ready.attachments[index].fileName))
-                                },
-                            )
-                            ImageNotice(ready.blockedImages, ready.unshownImages, onAllow = viewModel::allowImages, modifier = Modifier.padding(horizontal = side))
+                Layout(
+                    content = {
+                        Column(Modifier.padding(bottom = CapsuleGap), verticalArrangement = Arrangement.spacedBy(CapsuleGap)) {
+                            MessageHeader(state, actions, side = side)
+                            (body as? BodyState.Ready)?.let { ready ->
+                                AttachmentSection(
+                                    attachments = ready.attachments,
+                                    modifier = Modifier.padding(horizontal = side),
+                                    downloading = downloading,
+                                    onOpen = viewModel::openAttachment,
+                                    onSave = { index ->
+                                        saving = index
+                                        saver.launch(AttachmentFiles.safeName(ready.attachments[index].fileName))
+                                    },
+                                )
+                                ImageNotice(ready.blockedImages, ready.unshownImages, onAllow = viewModel::allowImages, modifier = Modifier.padding(horizontal = side))
+                            }
                         }
-                    }
-                    Box(Modifier.weight(1f)) {
                         BodySheet(
                             body = body,
                             shape = sheet,
@@ -232,15 +230,23 @@ private fun MessageContent(
                                     target.shownText == null || pendingLink?.url == target.url -> pendingLink = target
                                 }
                             },
-                            modifier = Modifier.fillMaxSize(),
                         )
-                        ActionBar(
-                            showReplyAll = replyAll,
-                            onAction = { onCompose(ComposeArgs(mode = it, sourceMessageId = messageId)) },
-                            modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = bottomInset),
-                        )
+                    },
+                    modifier = Modifier.fillMaxSize().testTag(MessageScrollTag).verticalScroll(rememberScrollState()),
+                ) { (top, sheetBody), constraints ->
+                    val loose = constraints.copy(minHeight = 0)
+                    val header = top.measure(loose)
+                    val card = sheetBody.measure(loose.copy(minHeight = (constraints.minHeight - header.height).coerceAtLeast(0)))
+                    layout(constraints.maxWidth, header.height + card.height) {
+                        header.place(0, 0)
+                        card.place(0, header.height)
                     }
                 }
+                ActionBar(
+                    showReplyAll = replyAll,
+                    onAction = { onCompose(ComposeArgs(mode = it, sourceMessageId = messageId)) },
+                    modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = bottomInset),
+                )
             }
         }
 
@@ -256,7 +262,6 @@ private fun MessageContent(
         }
         if (confirmDelete) {
             AlertDialog(
-                shape = capsuleShape(),
                 onDismissRequest = { viewModel.answerDeleteConfirm(false) },
                 title = { Text(stringResource(R.string.mailbox_delete_forever_title)) },
                 text = { Text(stringResource(R.string.mailbox_delete_forever_body)) },

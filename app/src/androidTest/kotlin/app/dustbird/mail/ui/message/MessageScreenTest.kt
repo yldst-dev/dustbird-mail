@@ -2,7 +2,14 @@ package app.dustbird.mail.ui.message
 
 import androidx.activity.ComponentActivity
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.test.pinch
 import androidx.compose.ui.test.assertCountEquals
+import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsNotDisplayed
+import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.swipeUp
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
@@ -93,17 +100,89 @@ class MessageScreenTest {
     }
 
     @Test
-    fun accountLabelAppearsOnlyWithMoreThanOneAccountAndUnknownAddressIsStatedPlainly() = runBlocking<Unit> {
+    fun accountLabelAppearsOnlyWithMoreThanOneAccountAndAnUnknownAddressShowsNoReceivedLine() = runBlocking<Unit> {
         val first = fixture.account("work")
         fixture.account("home")
         val id = fixture.message(first, to = listOf(EmailAddress("someone.else@example.com")), text = "body")
         show(id)
         awaitText("body")
         compose.onNodeWithTag(MessageAccountTag, useUnmergedTree = true).assertExists()
-        compose.onNodeWithText(text(R.string.message_identity_unknown)).assertExists()
+        compose.onAllNodesWithText(text(R.string.message_identity), useUnmergedTree = true).assertCountEquals(0)
         compose.onNodeWithTag(MessageSenderTag).performClick()
         compose.onNodeWithText(text(R.string.message_account)).assertExists()
-        compose.onNodeWithText(text(R.string.message_identity_unknown)).assertExists()
+        compose.onAllNodesWithText(text(R.string.message_identity), useUnmergedTree = true).assertCountEquals(0)
+    }
+
+    @Test
+    fun theLoginAddressAndAnAddressUsedForSentMailAreShownAsTheReceivedAddress() = runBlocking<Unit> {
+        val account = fixture.account("work", identityAddress = "main@example.com")
+        fixture.message(account, to = listOf(EmailAddress("friend@example.com")), text = "sent", folderId = fixture.sentFolder(account), from = "Alias@Example.com")
+        val id = fixture.message(account, to = listOf(EmailAddress("alias@example.com")), text = "body")
+        show(id)
+        awaitText("body")
+        compose.onNodeWithText(text(R.string.message_identity), useUnmergedTree = true).assertExists()
+        compose.onNodeWithText("alias@example.com", useUnmergedTree = true).assertExists()
+        compose.onNodeWithTag(MessageSenderTag).performClick()
+        compose.onAllNodesWithText("alias@example.com", useUnmergedTree = true).assertCountEquals(2)
+    }
+
+    @Test
+    fun sentMailShowsNoReceivedLine() = runBlocking<Unit> {
+        val account = fixture.account("work")
+        val id = fixture.message(account, to = listOf(EmailAddress("friend@example.com")), text = "sent body", folderId = fixture.sentFolder(account), from = "work@example.com")
+        show(id)
+        awaitText("sent body")
+        compose.onAllNodesWithText(text(R.string.message_identity), useUnmergedTree = true).assertCountEquals(0)
+        compose.onNodeWithTag(MessageSenderTag).performClick()
+        compose.onAllNodesWithText(text(R.string.message_identity), useUnmergedTree = true).assertCountEquals(0)
+    }
+
+    @Test
+    fun aLongBodyScrollsWithTheHeaderUntilTheBodyCardFillsTheScreen() = runBlocking<Unit> {
+        val account = fixture.account("work")
+        val id = fixture.message(account, to = listOf(EmailAddress("work@example.com")), html = (1..120).joinToString("") { "<p>Line $it of the long letter</p>" })
+        show(id)
+        compose.waitUntil(10_000) { compose.onAllNodes(hasTestTag("message_body_html")).fetchSemanticsNodes().isNotEmpty() }
+        val web = compose.awaitWebView()
+        val scroll = compose.onNodeWithTag(MessageScrollTag)
+        val viewport = scroll.fetchSemanticsNode().size.height
+        compose.waitUntil(10_000) { compose.runOnUiThread { web.height } > viewport }
+        compose.onNodeWithTag(MessageSenderTag).assertIsDisplayed()
+        val bodyTop = compose.onNodeWithTag("message_body_html").fetchSemanticsNode().positionInRoot.y
+        assertTrue(bodyTop > 0f)
+        scroll.performTouchInput { swipeUp(startY = bottom * 0.8f, endY = top, durationMillis = 400) }
+        compose.waitForIdle()
+        compose.onNodeWithTag(MessageSenderTag).assertIsNotDisplayed()
+        assertTrue(compose.onNodeWithTag("message_body_html").fetchSemanticsNode().positionInRoot.y < bodyTop)
+        assertTrue(scroll.fetchSemanticsNode().config[SemanticsProperties.VerticalScrollAxisRange].value() > 0f)
+    }
+
+    @Test
+    fun pinchingTheBodyStillZoomsInsideTheScrollingPage() = runBlocking<Unit> {
+        val account = fixture.account("work")
+        val id = fixture.message(account, to = listOf(EmailAddress("work@example.com")), html = (1..40).joinToString("") { "<p>Line $it of the letter</p>" })
+        show(id)
+        compose.waitUntil(10_000) { compose.onAllNodes(hasTestTag("message_body_html")).fetchSemanticsNodes().isNotEmpty() }
+        val web = compose.awaitWebView()
+        compose.waitUntil(10_000) { compose.runOnUiThread { web.progress == 100 && web.contentHeight > 0 } }
+        @Suppress("DEPRECATION")
+        fun scale() = compose.runOnUiThread { web.scale }
+        val before = scale()
+        compose.onNodeWithTag("message_body_html").performTouchInput {
+            val middle = Offset(centerX, 400f)
+            pinch(middle - Offset(0f, 40f), middle - Offset(0f, 300f), middle + Offset(0f, 40f), middle + Offset(0f, 300f), durationMillis = 600)
+        }
+        compose.waitUntil(5_000) { scale() > before }
+    }
+
+    @Test
+    fun aShortBodyFillsTheRestOfTheScreenWithoutScrolling() = runBlocking<Unit> {
+        val account = fixture.account("work")
+        val id = fixture.message(account, to = listOf(EmailAddress("work@example.com")), text = "short")
+        show(id)
+        awaitText("short")
+        val range = compose.onNodeWithTag(MessageScrollTag).fetchSemanticsNode().config[SemanticsProperties.VerticalScrollAxisRange]
+        assertEquals(0f, range.maxValue())
     }
 
     @Test

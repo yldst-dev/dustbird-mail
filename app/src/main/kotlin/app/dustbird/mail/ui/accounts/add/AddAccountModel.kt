@@ -32,6 +32,7 @@ data class FormValues(
     val displayName: String,
     val label: String,
     val identityName: String,
+    val identityLabel: String,
     val username: String,
     val imapHost: String,
     val imapPort: String,
@@ -73,6 +74,7 @@ class AddAccountFields {
     val displayName = TextFieldState()
     val label = TextFieldState()
     val identityName = TextFieldState()
+    val identityLabel = TextFieldState()
     val username = TextFieldState()
     val imapHost = TextFieldState()
     val imapPort = TextFieldState()
@@ -83,7 +85,7 @@ class AddAccountFields {
     var advancedOpen by mutableStateOf(false)
 
     fun reset(profile: ProviderProfile, suggestedName: String) {
-        listOf(address, password, identityName, username).forEach { it.clearText() }
+        listOf(address, password, identityName, identityLabel, username).forEach { it.clearText() }
         displayName.setTextAndPlaceCursorAtEnd(suggestedName)
         label.setTextAndPlaceCursorAtEnd(suggestedName)
         imapHost.setTextAndPlaceCursorAtEnd(profile.imap?.host.orEmpty())
@@ -129,6 +131,7 @@ class AddAccountFields {
         displayName = displayName.text.trim().toString(),
         label = label.text.trim().toString(),
         identityName = identityName.text.trim().toString(),
+        identityLabel = identityLabel.text.trim().toString(),
         username = username.text.trim().toString(),
         imapHost = imapHost.text.trim().toString(),
         imapPort = imapPort.text.trim().toString(),

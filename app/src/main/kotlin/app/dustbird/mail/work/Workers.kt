@@ -21,7 +21,7 @@ import androidx.work.workDataOf
 class SyncWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
     override suspend fun doWork(): Result {
         val container = (applicationContext as MailApplication).container
-        val ids = container.db.accounts().getAll().filter { it.syncMode == SyncMode.PERIODIC && !it.needsReauth }.map { it.id }
+        val ids = container.db.accounts().getAll().filter { it.syncMode != SyncMode.MANUAL && !it.needsReauth }.map { it.id }
         container.send.processAll()
         container.sync.syncAccounts(ids)
         return Result.success()

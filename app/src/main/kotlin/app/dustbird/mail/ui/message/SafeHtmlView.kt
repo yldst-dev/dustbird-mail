@@ -1,9 +1,12 @@
 package app.dustbird.mail.ui.message
 
 import android.annotation.SuppressLint
+import android.content.Context
 import android.content.res.Resources
 import android.os.Handler
 import android.os.Looper
+import android.view.MotionEvent
+import android.view.ViewGroup
 import android.webkit.RenderProcessGoneDetail
 import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
@@ -81,6 +84,14 @@ internal fun WebView.harden(imagesAllowed: Boolean, textZoom: Int) {
     }
 }
 
+private class PinchWebView(context: Context) : WebView(context) {
+    @SuppressLint("ClickableViewAccessibility")
+    override fun onTouchEvent(event: MotionEvent): Boolean {
+        if (event.pointerCount > 1) parent?.requestDisallowInterceptTouchEvent(true)
+        return super.onTouchEvent(event)
+    }
+}
+
 @SuppressLint("ResourceType")
 @Composable
 fun SafeHtmlView(page: HtmlPage, imagesAllowed: Boolean, onLink: (LinkTarget) -> Unit, modifier: Modifier = Modifier) {
@@ -89,7 +100,8 @@ fun SafeHtmlView(page: HtmlPage, imagesAllowed: Boolean, onLink: (LinkTarget) ->
     key(page, imagesAllowed, textZoom) {
         AndroidView(
             factory = { context ->
-                WebView(context).apply {
+                PinchWebView(context).apply {
+                    layoutParams = ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
                     harden(imagesAllowed, textZoom)
                     setBackgroundColor(page.background)
                     webViewClient = SafeWebViewClient(

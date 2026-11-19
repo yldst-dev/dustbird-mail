@@ -9,7 +9,6 @@
 보낼 편지함에서 이유를 확인하고 다시 시도해 주세요.</string>
     <string name="notify_unknown_sender">보낸 사람 없음</string>
     <string name="notify_no_subject">(제목 없음)</string>
-    <string name="notify_unknown_identity">수신 주소 미확인</string>
     <string name="notify_subtext">%1$s · %2$s</string>
     <string name="notify_public_title">새 메일</string>
     <string name="notify_public_text">%1$s 계정에 새 메일이 도착했습니다</string>

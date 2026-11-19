@@ -35,10 +35,16 @@ object RecipientMatcher {
         return if (own != null) RecipientMatch.OwnAddress(own) else RecipientMatch.Unknown
     }
 
-    fun ownAddresses(providerId: String, loginName: String, accountIdentities: List<MailIdentity>): (String) -> Boolean {
+    fun ownAddresses(
+        providerId: String,
+        loginName: String,
+        accountIdentities: List<MailIdentity>,
+        sentFrom: Collection<String> = emptyList(),
+    ): (String) -> Boolean {
         val login = Addresses.normalize(loginName).takeIf { '@' in it }
-        if (providerId != Providers.ICLOUD.id) return { address -> address == login }
-        val customDomains = accountIdentities.map { domainOf(Addresses.normalize(it.address)) }
+        val sent = sentFrom.map { Addresses.normalize(it) }.filter { '@' in it }.toSet()
+        if (providerId != Providers.ICLOUD.id) return { address -> address == login || address in sent }
+        val customDomains = (accountIdentities.map { Addresses.normalize(it.address) } + sent).map(::domainOf)
             .filter { it.isNotEmpty() && it !in appleRelayDomains }
             .toSet()
         return { address -> address == login || domainOf(address).let { it in customDomains || it in appleRelayDomains } }

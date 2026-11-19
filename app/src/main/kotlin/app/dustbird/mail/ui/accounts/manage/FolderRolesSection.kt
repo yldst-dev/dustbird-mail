@@ -41,7 +41,6 @@ import app.dustbird.mail.core.model.FolderRole
 import app.dustbird.mail.core.model.MailAccount
 import app.dustbird.mail.data.db.FolderEntity
 import app.dustbird.mail.ui.LocalAppContainer
-import app.dustbird.mail.ui.theme.capsuleShape
 import kotlinx.coroutines.launch
 
 private val shownRoles = listOf(
@@ -137,7 +136,6 @@ private fun FolderPicker(
     val scope = rememberCoroutineScope()
     val ordered = candidates + folders.filter { it !in candidates }
     AlertDialog(
-        shape = capsuleShape(),
         onDismissRequest = onDismiss,
         title = { Text(stringResource(R.string.accounts_role_pick_title, stringResource(roleName))) },
         text = {

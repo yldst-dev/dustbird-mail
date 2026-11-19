@@ -119,7 +119,7 @@ class AppContainer(
         }
         scope.launch { db.messages().unhideAll() }
         scope.launch {
-            accounts.accounts.map { list -> list.any { it.syncMode == SyncMode.PERIODIC } }.distinctUntilChanged().collect { scheduler.applyPeriodic(it) }
+            accounts.accounts.map { list -> list.any { it.syncMode != SyncMode.MANUAL } }.distinctUntilChanged().collect { scheduler.applyPeriodic(it) }
         }
         scope.launch {
             accounts.accounts.map { list -> list.any(::wantsIdle) }.distinctUntilChanged().collect { idle.apply(it) }

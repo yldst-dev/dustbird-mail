@@ -45,7 +45,6 @@ import app.dustbird.mail.ui.mailbox.rememberMessageTimeFormatter
 import app.dustbird.mail.ui.theme.CapsuleGap
 import app.dustbird.mail.ui.theme.CapsulePadding
 import app.dustbird.mail.ui.theme.capsuleItemShapes
-import app.dustbird.mail.ui.theme.capsuleShape
 import app.dustbird.mail.ui.theme.groupedTopAppBarColors
 import java.time.Instant
 import kotlinx.coroutines.launch
@@ -140,7 +139,6 @@ fun DraftsRoute(onBack: () -> Unit, onOpen: (Long) -> Unit) {
 
     deleting?.let { draft ->
         AlertDialog(
-            shape = capsuleShape(),
             onDismissRequest = { deleting = null },
             title = { Text(stringResource(R.string.drafts_delete_title)) },
             text = { Text(stringResource(R.string.drafts_delete_body)) },

@@ -45,6 +45,7 @@ sealed interface HeaderState {
         val accountIndex: Int,
         val showAccount: Boolean,
         val receivedIdentities: List<MailIdentity>,
+        val receivedAddress: String? = null,
     ) : HeaderState
 }
 
@@ -88,13 +89,15 @@ class MessageViewModel(private val container: AppContainer, private val id: Long
             HeaderState.Missing
         } else {
             val accountId = detail.summary.accountId
-            val matched = (detail.summary.match as? RecipientMatch.Matched)?.identityIds.orEmpty()
+            val match = detail.summary.match
+            val matched = (match as? RecipientMatch.Matched)?.identityIds.orEmpty()
             HeaderState.Found(
                 detail = detail,
                 account = accounts.firstOrNull { it.id == accountId },
                 accountIndex = accounts.indexOfFirst { it.id == accountId }.coerceAtLeast(0),
                 showAccount = accounts.size > 1,
                 receivedIdentities = identities.filter { it.id in matched }.sortedBy { it.sortOrder },
+                receivedAddress = (match as? RecipientMatch.OwnAddress)?.address,
             )
         }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), HeaderState.Loading)

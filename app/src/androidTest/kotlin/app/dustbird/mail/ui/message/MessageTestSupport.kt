@@ -85,6 +85,13 @@ internal class MessageFixture {
         return accountId
     }
 
+    suspend fun sentFolder(accountId: Long): Long = db.folders().insert(
+        FolderEntity(
+            accountId = accountId, path = "Sent", delimiter = "/", attributes = "", role = FolderRole.SENT, roleConfirmed = true,
+            uidValidity = 1, highestUid = 0, baselineComplete = false, syncedAt = 0,
+        ),
+    )
+
     suspend fun message(
         accountId: Long,
         to: List<EmailAddress>,
@@ -94,12 +101,14 @@ internal class MessageFixture {
         attachments: List<AttachmentInfo> = emptyList(),
         withBody: Boolean = true,
         subject: String = "Quarterly report",
+        folderId: Long? = null,
+        from: String = "sender@example.com",
     ): Long {
-        val folderId = db.folders().byRole(accountId, FolderRole.INBOX)!!.id
+        val target = folderId ?: db.folders().byRole(accountId, FolderRole.INBOX)!!.id
         val id = db.messages().upsert(
             MessageEntity(
-                accountId = accountId, folderId = folderId, uid = 1, uidValidity = 1, messageId = "<m$accountId@example.com>", inReplyTo = null,
-                references = "", fromName = "Sender Name", fromAddress = "sender@example.com", replyTo = "", toAddresses = Codec.addresses(to),
+                accountId = accountId, folderId = target, uid = 1, uidValidity = 1, messageId = "<m$accountId-$target@example.com>", inReplyTo = null,
+                references = "", fromName = "Sender Name", fromAddress = from, replyTo = "", toAddresses = Codec.addresses(to),
                 ccAddresses = Codec.addresses(cc), deliveryValues = "", subject = subject, sortDate = 1_794_000_000_000, preview = "",
                 size = 1, hasAttachment = attachments.isNotEmpty(), seen = false, answered = false, flagged = false, allowRemoteImages = false,
             ),

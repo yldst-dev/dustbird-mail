@@ -40,6 +40,7 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -297,6 +298,8 @@ class SyncService(
         val account = db.accounts().get(accountId)?.toModel() ?: return
         if (!account.notificationsEnabled) return
         val identities = db.identities().forAccount(accountId).map { it.toModel() }
+        val sentFrom = db.messages().observeSentFrom().first().filter { it.accountId == accountId }.map { it.address }
+        val own = RecipientMatcher.ownAddresses(account.providerId, account.username, identities, sentFrom)
         val mails = ArrayList<NewMail>()
         for ((folder, messages) in found) {
             val rows = db.messages().byUids(folder.id, messages.map { it.uid }).associateBy { it.uid }
@@ -307,8 +310,13 @@ class SyncService(
                 val match = RecipientMatcher.match(
                     ReceivedAddressing(message.headers.to, message.headers.cc, message.headers.deliveryHeaderValues),
                     identities,
+                    own,
                 )
-                val label = (match as? RecipientMatch.Matched)?.identityIds?.firstNotNullOfOrNull { id -> identities.firstOrNull { it.id == id }?.label }
+                val label = when (match) {
+                    is RecipientMatch.Matched -> match.identityIds.firstNotNullOfOrNull { id -> identities.firstOrNull { it.id == id }?.label }
+                    is RecipientMatch.OwnAddress -> match.address
+                    else -> null
+                }
                 val sender = message.headers.from.firstOrNull()?.let { it.name ?: it.address }.orEmpty()
                 mails += NewMail(row.id, sender, message.headers.subject, message.preview, label)
             }

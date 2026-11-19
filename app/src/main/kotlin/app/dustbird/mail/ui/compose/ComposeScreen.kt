@@ -89,6 +89,8 @@ import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import androidx.window.core.layout.WindowSizeClass
 import app.dustbird.mail.R
+import app.dustbird.mail.data.AgentMode
+import kotlinx.coroutines.launch
 import app.dustbird.mail.core.model.SendVerification
 import app.dustbird.mail.ui.LocalAppContainer
 import app.dustbird.mail.ui.mailbox.rememberAnimationsEnabled
@@ -97,7 +99,6 @@ import app.dustbird.mail.ui.nav.ComposeMode
 import app.dustbird.mail.ui.theme.FlatMenu
 import app.dustbird.mail.ui.theme.MenuEntry
 import app.dustbird.mail.ui.theme.FlatSnackbarHost
-import app.dustbird.mail.ui.theme.capsuleShape
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -193,7 +194,8 @@ fun ComposeRoute(args: ComposeArgs, onClose: () -> Unit, onOpenAgentSettings: ()
         WriterSheet(
             writing = vm.writing,
             access = when {
-                settings == null || !settings.connected -> WriterAccess.OFF
+                settings == null || settings.mode == AgentMode.OFF -> WriterAccess.OFF
+                !settings.consent -> WriterAccess.CONSENT
                 accountId != null && accountId in settings.blockedAccounts -> WriterAccess.BLOCKED
                 else -> WriterAccess.READY
             },
@@ -214,6 +216,7 @@ fun ComposeRoute(args: ComposeArgs, onClose: () -> Unit, onOpenAgentSettings: ()
                 writingOpen = false
                 vm.dismissWriting()
             },
+            onConsent = { container.scope.launch { container.agent.update { it.copy(consent = true) } } },
         )
     }
     ComposeDialogs(vm, phase, onClose, onChangeSender = { showSheet = true })
@@ -577,7 +580,6 @@ private fun revealTransitions(): Pair<EnterTransition, ExitTransition> {
 private fun ComposeDialogs(vm: ComposeViewModel, phase: SendPhase, onClose: () -> Unit, onChangeSender: () -> Unit) {
     when (vm.dialog) {
         ComposeDialog.EmptySubject -> AlertDialog(
-            shape = capsuleShape(),
             onDismissRequest = { vm.dialog = null },
             title = { Text(stringResource(R.string.compose_dialog_subject_title)) },
             text = { Text(stringResource(R.string.compose_dialog_subject_text)) },
@@ -594,7 +596,6 @@ private fun ComposeDialogs(vm: ComposeViewModel, phase: SendPhase, onClose: () -
             val unsure = !vm.senderConfirmed
             val failed = identity?.verification == SendVerification.FAILED
             AlertDialog(
-                shape = capsuleShape(),
                 onDismissRequest = { vm.dialog = null },
                 title = { Text(stringResource(R.string.compose_dialog_sender_title)) },
                 text = {
@@ -613,7 +614,6 @@ private fun ComposeDialogs(vm: ComposeViewModel, phase: SendPhase, onClose: () -
             )
         }
         ComposeDialog.Discard -> AlertDialog(
-            shape = capsuleShape(),
             onDismissRequest = { vm.dialog = null },
             title = { Text(stringResource(R.string.compose_dialog_discard_title)) },
             text = { Text(stringResource(R.string.compose_dialog_discard_text)) },
@@ -671,7 +671,6 @@ private fun OutcomeDialog(
     onDismiss: () -> Unit = {},
 ) {
     AlertDialog(
-        shape = capsuleShape(),
         onDismissRequest = {},
         title = { Text(stringResource(title)) },
         text = { Text(text) },

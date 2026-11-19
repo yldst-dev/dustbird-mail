@@ -42,7 +42,6 @@ import app.dustbird.mail.ui.theme.FlatCard
 import app.dustbird.mail.ui.theme.GroupTitle
 import app.dustbird.mail.ui.theme.Pill
 import app.dustbird.mail.ui.theme.accountAccent
-import app.dustbird.mail.ui.theme.capsuleShape
 import app.dustbird.mail.ui.theme.pillFieldColors
 import app.dustbird.mail.ui.theme.pillToggleShapes
 
@@ -81,7 +80,6 @@ fun ConfirmDialog(
     destructive: Boolean = false,
 ) {
     AlertDialog(
-        shape = capsuleShape(),
         onDismissRequest = onDismiss,
         title = { Text(stringResource(title)) },
         text = { Column(Modifier.verticalScroll(rememberScrollState())) { Text(text) } },

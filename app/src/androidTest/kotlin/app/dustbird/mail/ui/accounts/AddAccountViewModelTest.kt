@@ -77,6 +77,7 @@ private fun validValues() = FormValues(
     displayName = "Gmail",
     label = "Gmail",
     identityName = "",
+    identityLabel = "",
     username = "user@example.com",
     imapHost = "imap.example.com",
     imapPort = "993",

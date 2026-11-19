@@ -34,6 +34,20 @@ class RecipientAndReplyTest {
     }
 
     @Test
+    fun addressesUsedForSentMailCountAsOwn() {
+        val main = identity(7, 50, "primary@icloud.com", "main", isDefault = true)
+        fun to(value: String) = ReceivedAddressing(listOf(addr(value)), emptyList(), emptyList())
+        val cloud = RecipientMatcher.ownAddresses("icloud", "primary@icloud.com", listOf(main), listOf("Me@MyDomain.example", "", "not-an-address"))
+        assertEquals(RecipientMatch.OwnAddress("shop@mydomain.example"), RecipientMatcher.match(to("shop@mydomain.example"), listOf(main), cloud))
+        assertEquals(RecipientMatch.Unknown, RecipientMatcher.match(to("list@lists.example"), listOf(main), cloud))
+        assertEquals(RecipientMatch.Unknown, RecipientMatcher.match(to("shop@mydomain.example"), listOf(main), RecipientMatcher.ownAddresses("icloud", "primary@icloud.com", listOf(main))))
+        val work = identity(8, 60, "me@company.example", "work", isDefault = true)
+        val other = RecipientMatcher.ownAddresses("gmail", "me@company.example", listOf(work), listOf("Alias@Company.example"))
+        assertEquals(RecipientMatch.OwnAddress("alias@company.example"), RecipientMatcher.match(to("alias@company.example"), listOf(work), other))
+        assertEquals(RecipientMatch.Unknown, RecipientMatcher.match(to("colleague@company.example"), listOf(work), other))
+    }
+
+    @Test
     fun hideMyEmailIsAnAppleMailAddressOtherThanTheLoginOnICloud() {
         assertTrue(RecipientMatcher.isHideMyEmail("icloud", "primary@icloud.com", "Quiet.Fox42@iCloud.com"))
         assertTrue(RecipientMatcher.isHideMyEmail("icloud", "primary@icloud.com", "old@me.com"))

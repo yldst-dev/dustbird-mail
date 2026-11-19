@@ -137,6 +137,7 @@ class AddAccountViewModel(
             identityDisplayName = values.identityName,
             imap = ServerEndpoint(values.imapHost, FormRules.parsePort(values.imapPort)!!, values.imapSecurity),
             smtp = ServerEndpoint(values.smtpHost, FormRules.parsePort(values.smtpPort)!!, values.smtpSecurity),
+            identityLabel = values.identityLabel,
         )
         pending = new
         val secret = values.password

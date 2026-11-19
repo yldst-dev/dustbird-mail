@@ -71,6 +71,7 @@ fun AddAccountRoute(onBack: () -> Unit, onDone: () -> Unit, onOpenAgentSettings:
         .collectAsStateWithLifecycle(initialValue = false)
     val agentReady by remember(container) { container.agent.current.map { it.mode != AgentMode.OFF && it.consent } }
         .collectAsStateWithLifecycle(initialValue = false)
+    val accountCount by remember(container) { container.accounts.accounts.map { it.size } }.collectAsStateWithLifecycle(0)
     val motion = rememberMotion()
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
     val progress by animateFloatAsState((state.step.ordinal + 1f) / AddStep.entries.size, motion.effects(), label = "progress")
@@ -125,6 +126,7 @@ fun AddAccountRoute(onBack: () -> Unit, onDone: () -> Unit, onOpenAgentSettings:
                         providerId, viewModel.fields, state.showErrors, motion, viewModel::verify,
                         state.assist, agentReady, viewModel::assist, viewModel::dismissAssist, onOpenAgentSettings,
                         signIn, viewModel.clientId, viewModel::startSignIn, viewModel::cancelSignIn,
+                        accountIndex = accountCount,
                     )
                     step == AddStep.VERIFY -> VerifyStep(state, viewModel::save, viewModel::backToForm, viewModel::verify)
                     step == AddStep.SYNC -> SyncStep(state, viewModel::retrySync, viewModel::continueAfterSync, viewModel::finish)

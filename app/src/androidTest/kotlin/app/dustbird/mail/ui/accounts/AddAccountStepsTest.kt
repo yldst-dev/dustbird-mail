@@ -7,6 +7,10 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.hasTestTag
+import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertIsEnabled
@@ -29,6 +33,7 @@ import app.dustbird.mail.core.provider.Providers
 import app.dustbird.mail.ui.accounts.add.AddAccountFields
 import app.dustbird.mail.ui.accounts.add.AssistState
 import app.dustbird.mail.ui.accounts.add.FormStep
+import app.dustbird.mail.ui.accounts.add.LabelPreviewTag
 import app.dustbird.mail.ui.accounts.add.PrepareStep
 import app.dustbird.mail.ui.accounts.add.rememberMotion
 import app.dustbird.mail.ui.theme.DustbirdTheme
@@ -71,6 +76,30 @@ class AddAccountStepsTest {
         confirm.assertIsOn()
         button.assertIsEnabled().performClick()
         assertEquals(1, next)
+    }
+
+    @Test
+    fun theLabelPreviewFollowsWhatIsTypedAndAPresetFillsTheAccountLabel() {
+        val fields = AddAccountFields().apply { reset(Providers.GMAIL, "Gmail") }
+        compose.setContent {
+            DustbirdTheme {
+                FormStep(Providers.GMAIL.id, fields, false, rememberMotion(), {}, AssistState.Idle, false, {}, {}, {})
+            }
+        }
+        fun preview(text: String) = compose.onNode(hasText(text) and hasAnyAncestor(hasTestTag(LabelPreviewTag)), useUnmergedTree = true)
+        compose.onNodeWithTag(LabelPreviewTag, useUnmergedTree = true).performScrollTo()
+        preview("Gmail").assertExists()
+        preview(string(R.string.add_account_labels_empty)).assertExists()
+
+        compose.runOnUiThread { fields.address.setTextAndPlaceCursorAtEnd("friend@example.test") }
+        preview("friend").assertExists()
+        compose.onNodeWithText(string(R.string.add_account_label_work)).performScrollTo().performClick()
+        assertEquals(string(R.string.add_account_label_work), fields.label.text.toString())
+        preview(string(R.string.add_account_label_work)).assertExists()
+
+        compose.runOnUiThread { fields.identityLabel.setTextAndPlaceCursorAtEnd("쇼핑") }
+        preview("쇼핑").assertExists()
+        assertEquals("쇼핑", fields.values().identityLabel)
     }
 
     @Test

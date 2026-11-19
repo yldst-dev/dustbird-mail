@@ -54,7 +54,7 @@
     <string name="accounts_sync_idle">실시간</string>
     <string name="accounts_sync_manual_desc">사용자가 직접 새로 고칠 때만 메일을 가져옵니다. 새로 고치지 않으면 새 메일 알림도 오지 않습니다.</string>
     <string name="accounts_sync_periodic_desc">안드로이드의 예약 작업으로 주기적으로 확인합니다. 가장 빨라도 약 15분마다이며, 절전 상태에서는 안드로이드가 더 늦출 수 있습니다.</string>
-    <string name="accounts_sync_idle_desc">서버와 연결을 계속 열어 두고 새 메일을 바로 받습니다. 상시 연결 서비스를 사용자가 직접 켜야 동작하며, 거의 즉시 도착하는 대신 계정이 늘수록 배터리를 더 씁니다.</string>
+    <string name="accounts_sync_idle_desc">서버와 연결을 계속 열어 두고 새 메일을 바로 받습니다. 알림 창에 수신 중 표시가 계속 보이고, 계정이 늘수록 배터리를 더 씁니다. 연결이 끊긴 동안에는 약 15분마다 확인합니다.</string>
     <string name="accounts_sync_naver_note">네이버 메일 서버는 로그인하기 전에 IDLE 지원을 알려 주지 않았습니다. 그래서 이 계정에서는 주기적 확인이 현실적인 선택입니다.</string>
     <string name="accounts_notifications">이 계정의 새 메일 알림</string>
     <string name="accounts_basics_save">기본 정보 저장</string>

@@ -112,6 +112,7 @@ sealed interface ChatEntry {
 
 data class AgentUiState(
     val configured: Boolean = true,
+    val needsConsent: Boolean = false,
     val sessionId: Long? = null,
     val entries: List<ChatEntry> = emptyList(),
     val partial: String = "",
@@ -162,6 +163,7 @@ class AgentViewModel(private val container: AppContainer, initialSession: Long?)
     val state: StateFlow<AgentUiState> = combine(sessionId, items, live, agent.current, agent.sessions) { id, list, now, settings, sessions ->
         AgentUiState(
             configured = settings.mode != AgentMode.OFF && settings.consent,
+            needsConsent = settings.mode != AgentMode.OFF && !settings.consent,
             sessionId = id,
             entries = chatEntries(list),
             partial = id?.let { now.partial[it] }.orEmpty(),
@@ -171,6 +173,10 @@ class AgentViewModel(private val container: AppContainer, initialSession: Long?)
             sessions = sessions,
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), AgentUiState())
+
+    fun agree() {
+        container.scope.launch { agent.update { it.copy(consent = true) } }
+    }
 
     fun send(text: String, contextNote: String?) {
         viewModelScope.launch {
@@ -266,6 +272,7 @@ fun AgentRoute(messageId: Long?, sessionId: Long?, onBack: () -> Unit, onOpenSet
         },
     ) { padding ->
         when {
+            state.needsConsent -> AgentConsentCard(viewModel::agree, Modifier.padding(padding).padding(16.dp))
             !state.configured -> Setup(onOpenSettings, Modifier.padding(padding))
             state.entries.isEmpty() && !state.running && state.error == null -> Welcome(
                 hasContext = messageId != null,

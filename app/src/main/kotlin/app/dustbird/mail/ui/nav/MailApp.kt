@@ -1,11 +1,9 @@
 package app.dustbird.mail.ui.nav
 
-import android.Manifest
-import android.content.pm.PackageManager
-import android.os.Build
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
+import androidx.activity.BackEventCompat
 import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -23,9 +21,12 @@ import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
-import androidx.compose.ui.platform.LocalContext
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import app.dustbird.mail.core.model.SyncMode
+import app.dustbird.mail.ui.DeliveryPrompts
+import app.dustbird.mail.ui.rememberNotificationRequest
 import app.dustbird.mail.ui.LocalAppContainer
 import app.dustbird.mail.ui.accounts.AccountDetailRoute
 import app.dustbird.mail.ui.accounts.AccountsRoute
@@ -87,18 +88,14 @@ fun MailApp(
         if (outboxRequest > 0 && ready()) navController.navigate(Routes.OUTBOX) { launchSingleTop = true }
     }
 
-    val context = LocalContext.current
-    val notificationPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {}
-    val onMailbox = navController.currentBackStackEntryAsState().value?.destination?.route == Routes.MAILBOX
-    LaunchedEffect(onMailbox) {
-        if (onMailbox && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
-            context.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED &&
-            !container.settings.notificationPromptDone.first()
-        ) {
-            container.settings.markNotificationPromptDone()
-            notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
-        }
-    }
+    val route = navController.currentBackStackEntryAsState().value?.destination?.route
+    val accounts by container.accounts.accounts.collectAsStateWithLifecycle(emptyList())
+    DeliveryPrompts(
+        notifying = accounts.any { it.notificationsEnabled },
+        realTime = accounts.any { it.syncMode == SyncMode.IDLE && !it.needsReauth },
+        visible = route != null && route != Routes.ADD_ACCOUNT,
+        onAllowNotifications = rememberNotificationRequest(container.settings),
+    )
 
     val animations = rememberAnimationsEnabled()
     val spatial = MaterialTheme.motionScheme.slowSpatialSpec<IntOffset>()
@@ -111,6 +108,12 @@ fun MailApp(
         exitTransition = { if (animations) slideOutHorizontally(spatial) { -it / 4 } + fadeOut(effects) else ExitTransition.None },
         popEnterTransition = { if (animations) slideInHorizontally(spatial) { -it / 4 } + fadeIn(effects) else EnterTransition.None },
         popExitTransition = { if (animations) slideOutHorizontally(spatial) { it / 4 } + fadeOut(effects) else ExitTransition.None },
+        predictivePopEnterTransition = { edge ->
+            if (animations) slideInHorizontally(tween(SWIPE_BACK_MS, easing = LinearEasing)) { -swipeSide(edge) * it / 4 } + fadeIn(tween(SWIPE_BACK_MS, easing = LinearEasing)) else EnterTransition.None
+        },
+        predictivePopExitTransition = { edge ->
+            if (animations) slideOutHorizontally(tween(SWIPE_BACK_MS, easing = LinearEasing)) { swipeSide(edge) * it } else ExitTransition.None
+        },
     ) {
         composable(Routes.MAILBOX) {
             MailboxRoute(
@@ -208,3 +211,7 @@ fun MailApp(
     )
     }
 }
+
+private fun swipeSide(edge: Int): Int = if (edge == BackEventCompat.EDGE_RIGHT) -1 else 1
+
+private const val SWIPE_BACK_MS = 300

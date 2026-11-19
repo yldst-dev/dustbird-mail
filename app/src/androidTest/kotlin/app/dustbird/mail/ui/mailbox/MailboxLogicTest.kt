@@ -39,9 +39,10 @@ class MailboxLogicTest {
         accounts: List<MailAccount> = listOf(account(1), account(2)),
         problems: List<AccountProblem> = emptyList(),
         busy: Boolean = false,
+        refreshing: Boolean = false,
     ) = MailboxUiState(
         scope = MailboxScope.Unified, accounts = accounts, scopeAccounts = accounts, identityLabels = emptyMap(), messages = messages,
-        unread = emptyMap(), problems = problems, busy = busy, refreshing = false, loadingOlder = false, hasMore = false,
+        unread = emptyMap(), problems = problems, busy = busy, refreshing = refreshing, loadingOlder = false, hasMore = false,
         outboxPending = 0, selectedId = null,
     )
 
@@ -50,6 +51,7 @@ class MailboxLogicTest {
         val failed = listOf(AccountProblem(account(1), ConnectFailure.UNREACHABLE), AccountProblem(account(2), null))
         assertEquals(MailboxBody.LOADING, state(null).body(online = true))
         assertEquals(MailboxBody.LOADING, state(emptyList(), busy = true).body(online = true))
+        assertEquals(MailboxBody.EMPTY, state(emptyList(), busy = true, refreshing = true).body(online = true))
         assertEquals(MailboxBody.EMPTY, state(emptyList()).body(online = true))
         assertEquals(MailboxBody.OFFLINE, state(emptyList()).body(online = false))
         assertEquals(MailboxBody.FAILED, state(emptyList(), problems = failed).body(online = true))

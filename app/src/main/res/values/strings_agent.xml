@@ -125,6 +125,8 @@
 
     <string name="agent_section_privacy">동의와 범위</string>
     <string name="agent_consent_title">메일 내용 전송에 동의</string>
+    <string name="agent_consent_needed">에이전트는 연결되어 있습니다. 메일 내용을 보내는 데 동의하면 바로 쓸 수 있습니다.</string>
+    <string name="agent_consent_agree">동의하고 계속</string>
     <string name="agent_consent_text">에이전트가 일하는 동안 필요한 메일의 보낸 사람, 제목, 본문이 위에서 고른 연결 대상으로 전송됩니다. 메일 계정의 비밀번호는 전송하지 않습니다.</string>
     <string name="agent_accounts_title">에이전트가 볼 수 있는 계정</string>
     <string name="agent_auto_changes_title">되돌릴 수 있는 일은 묻지 않기</string>

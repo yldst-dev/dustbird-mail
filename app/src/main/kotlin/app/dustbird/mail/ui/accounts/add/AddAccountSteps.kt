@@ -110,6 +110,14 @@ import app.dustbird.mail.ui.agent.agentFailureText
 import app.dustbird.mail.ui.mailbox.rememberAnimationsEnabled
 import app.dustbird.mail.ui.theme.CapsuleGap
 import app.dustbird.mail.ui.theme.CapsulePadding
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.material3.FilterChip
+import androidx.compose.foundation.text.input.setTextAndPlaceCursorAtEnd
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.heading
+import app.dustbird.mail.ui.mailbox.AccountLabel
+import app.dustbird.mail.ui.mailbox.IdentityLabel
 import app.dustbird.mail.ui.theme.FlatCard
 import app.dustbird.mail.ui.theme.Pill
 import app.dustbird.mail.ui.theme.cardItemShapes
@@ -302,6 +310,47 @@ fun PrepareStep(providerId: String, acknowledged: Boolean, motion: Motion, onAck
     }
 }
 
+const val LabelPreviewTag = "add_account_label_preview"
+
+private val labelPresets = listOf(R.string.add_account_label_personal, R.string.add_account_label_work, R.string.add_account_label_school)
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun LabelSetup(fields: AddAccountFields, accountIndex: Int, @StringRes labelError: Int?) {
+    val haptics = rememberHaptics()
+    val account = fields.label.text.trim().toString()
+    val received = fields.identityLabel.text.trim().toString().ifEmpty { fields.address.text.trim().toString().substringBefore('@') }
+    val empty = stringResource(R.string.add_account_labels_empty)
+    Text(stringResource(R.string.add_account_labels_title), style = MaterialTheme.typography.titleMediumEmphasized, modifier = Modifier.padding(top = 8.dp).semantics { heading() })
+    FlatCard {
+        Column(Modifier.padding(horizontal = 20.dp, vertical = 16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(stringResource(R.string.add_account_labels_preview), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            FlowRow(
+                modifier = Modifier.testTag(LabelPreviewTag),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+                itemVerticalAlignment = Alignment.CenterVertically,
+            ) {
+                AccountLabel(account.ifEmpty { empty }, accountIndex)
+                IdentityLabel(stringResource(R.string.mailbox_row_received_at), received.ifEmpty { empty })
+            }
+        }
+    }
+    Field(fields.label, R.string.add_account_field_label, R.string.add_account_field_label_hint, labelError)
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        labelPresets.forEach { preset ->
+            val text = stringResource(preset)
+            FilterChip(
+                selected = account == text,
+                onClick = { haptics.tick(); fields.label.setTextAndPlaceCursorAtEnd(text) },
+                label = { Text(text) },
+                shape = Pill,
+            )
+        }
+    }
+    Field(fields.identityLabel, R.string.add_account_field_identity_label, R.string.add_account_field_identity_label_hint, null)
+}
+
 @Composable
 private fun Field(
     state: TextFieldState,
@@ -435,6 +484,7 @@ fun FormStep(
     clientId: TextFieldState? = null,
     onSignIn: () -> Unit = {},
     onCancelSignIn: () -> Unit = {},
+    accountIndex: Int = 0,
 ) {
     val texts = serviceTexts(providerId)
     val tokenLogin = clientId != null && AuthMethod.OAUTH2 in Providers.byId(providerId).authMethods
@@ -515,8 +565,8 @@ fun FormStep(
             },
         )
         Field(fields.displayName, R.string.add_account_field_display_name, R.string.add_account_field_display_name_hint, required(FormField.DISPLAY_NAME))
-        Field(fields.label, R.string.add_account_field_label, R.string.add_account_field_label_hint, required(FormField.LABEL))
         Field(fields.identityName, R.string.add_account_field_identity_name, R.string.add_account_field_identity_name_hint, null)
+        LabelSetup(fields, accountIndex, required(FormField.LABEL))
         Column(Modifier.fillMaxWidth()) {
             val stateText = stringResource(
                 if (fields.advancedOpen) R.string.add_account_advanced_expanded else R.string.add_account_advanced_collapsed,

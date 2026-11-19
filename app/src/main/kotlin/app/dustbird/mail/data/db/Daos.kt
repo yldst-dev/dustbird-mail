@@ -106,6 +106,7 @@ interface FolderDao {
 }
 
 data class UnreadCount(val accountId: Long, val count: Int)
+data class SentFrom(val accountId: Long, val address: String)
 
 private const val SEARCH_SCOPE = " m.listState != 1 AND (:accountId < 0 OR m.accountId = :accountId) AND (:role IS NULL OR f.role = :role) " +
     "AND m.sortDate >= :since AND m.sortDate < :until AND (:unread = 0 OR m.seen = 0) AND (:starred = 0 OR m.flagged = 1) " +
@@ -224,6 +225,12 @@ interface MessageDao {
             "WHERE f.role = 'INBOX' AND m.seen = 0 AND m.listState = 0 GROUP BY f.accountId",
     )
     fun observeUnreadCounts(): Flow<List<UnreadCount>>
+
+    @Query(
+        "SELECT DISTINCT f.accountId AS accountId, m.fromAddress AS address FROM message m JOIN folder f ON f.id = m.folderId " +
+            "WHERE f.role = 'SENT' AND m.fromAddress IS NOT NULL AND m.fromAddress != ''",
+    )
+    fun observeSentFrom(): Flow<List<SentFrom>>
 
     @Query("SELECT * FROM message_body WHERE messageRowId = :id")
     suspend fun body(id: Long): MessageBodyEntity?

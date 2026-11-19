@@ -41,6 +41,7 @@ import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import app.dustbird.mail.R
+import app.dustbird.mail.ui.agent.AgentConsentCard
 import app.dustbird.mail.core.agent.BackendFailure
 import app.dustbird.mail.ui.agent.AgentFailureMessage
 import app.dustbird.mail.ui.agent.agentFailureText
@@ -49,7 +50,7 @@ import app.dustbird.mail.ui.theme.Pill
 import app.dustbird.mail.ui.theme.pillFieldColors
 import app.dustbird.mail.ui.theme.rememberHaptics
 
-enum class WriterAccess { READY, OFF, BLOCKED }
+enum class WriterAccess { READY, OFF, CONSENT, BLOCKED }
 
 @Composable
 fun WriterEntry(enabled: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier) {
@@ -87,6 +88,7 @@ fun WriterSheet(
     onApply: () -> Unit,
     onOpenSettings: () -> Unit,
     onDismiss: () -> Unit,
+    onConsent: () -> Unit = {},
 ) {
     val request = rememberTextFieldState()
     val haptics = rememberHaptics()
@@ -107,6 +109,10 @@ fun WriterSheet(
                     Text(stringResource(R.string.compose_writer_title), style = MaterialTheme.typography.titleLarge, modifier = Modifier.semantics { heading() })
                     Text(stringResource(R.string.compose_writer_body), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
+            }
+            if (access == WriterAccess.CONSENT) {
+                AgentConsentCard(onConsent)
+                return@Column
             }
             if (access != WriterAccess.READY) {
                 FlatCard(color = MaterialTheme.colorScheme.secondaryContainer) {

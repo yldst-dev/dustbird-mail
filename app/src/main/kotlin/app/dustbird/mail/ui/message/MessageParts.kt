@@ -220,15 +220,15 @@ internal fun BodySheet(
     }
     Surface(modifier, shape = shape, color = page?.let { Color(it.background) } ?: scheme.surface) {
         val clear = Modifier.padding(bottom = bottomSpace)
-        Box(Modifier.padding(top = 12.dp)) {
+        Box(Modifier.padding(top = 12.dp), propagateMinConstraints = true) {
             when (body) {
                 BodyState.Loading -> CenteredLoading(clear)
                 is BodyState.Failed -> CenteredMessage(stringResource(failureText(body.failure)), clear) {
                     Button(onClick = onRetry) { Text(stringResource(R.string.message_retry)) }
                 }
                 is BodyState.Ready -> when {
-                    page != null -> SafeHtmlView(page, body.imagesAllowed, onLink, Modifier.fillMaxSize().testTag("message_body_html"))
-                    body.text != null -> Box(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
+                    page != null -> SafeHtmlView(page, body.imagesAllowed, onLink, Modifier.fillMaxWidth().testTag("message_body_html"))
+                    body.text != null -> {
                         val linkStyle = TextLinkStyles(SpanStyle(color = scheme.primary, textDecoration = TextDecoration.Underline))
                         val latestOnLink by rememberUpdatedState(onLink)
                         val linked = remember(body.text, linkStyle) {
